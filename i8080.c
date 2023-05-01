@@ -12,6 +12,25 @@
 #define FLAG_Z  0x40
 #define FLAG_S  0x80
 
+static const uint8_t parity_table[256] = {
+	1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1,
+	0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0,
+	0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0,
+	1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1,
+	0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0,
+	1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1,
+	1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1,
+	0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0,
+	0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0,
+	1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1,
+	1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1,
+	0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0,
+	1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1,
+	0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0,
+	0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0,
+	1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1,
+};
+
 static inline void
 set_flag(struct i8080 *ctx, uint8_t mask)
 {
@@ -180,51 +199,194 @@ op_xchg(struct i8080 *ctx)
 }
 
 static inline void
+op_xthl(struct i8080 *ctx)
+{
+	uint16_t tmp16;
+
+	tmp16 = read_word(ctx, ctx->sp);
+	write_word(ctx, ctx->sp, get_hl(ctx));
+	set_hl(ctx, tmp16);
+}
+
+static inline void
 op_add(struct i8080 *ctx, uint8_t val)
 {
-	/* TODO */
+	uint16_t tmp16;
+
+	tmp16 = ctx->a + val;
+	ctx->a = tmp16 & 0xff;
+	set_flag_to(ctx, FLAG_C, (tmp16 & 0x100) != 0);
+	set_flag_to(ctx, FLAG_P, parity_table[ctx->a]);
+	/* set_flag_to(ctx, FLAG_AC, ); */
+	set_flag_to(ctx, FLAG_Z, ctx->a == 0);
+	set_flag_to(ctx, FLAG_S, (ctx->a & 0x80) != 0);
 }
 
 static inline void
 op_adc(struct i8080 *ctx, uint8_t val)
 {
-	/* TODO */
+	uint16_t tmp16;
+
+	tmp16 = ctx->a + val + get_flag(ctx, FLAG_C);
+	ctx->a = tmp16 & 0xff;
+	set_flag_to(ctx, FLAG_C, (tmp16 & 0x100) != 0);
+	set_flag_to(ctx, FLAG_P, parity_table[ctx->a]);
+	/* set_flag_to(ctx, FLAG_AC, ); */
+	set_flag_to(ctx, FLAG_Z, ctx->a == 0);
+	set_flag_to(ctx, FLAG_S, (ctx->a & 0x80) != 0);
 }
 
 static inline void
 op_sub(struct i8080 *ctx, uint8_t val)
 {
-	/* TODO */
+	uint16_t tmp16;
+
+	tmp16 = ctx->a - val;
+	ctx->a = tmp16 & 0xff;
+	set_flag_to(ctx, FLAG_C, (tmp16 & 0x100) != 0);
+	set_flag_to(ctx, FLAG_P, parity_table[ctx->a]);
+	/* set_flag_to(ctx, FLAG_AC, ); */
+	set_flag_to(ctx, FLAG_Z, ctx->a == 0);
+	set_flag_to(ctx, FLAG_S, (ctx->a & 0x80) != 0);
 }
 
 static inline void
 op_sbb(struct i8080 *ctx, uint8_t val)
 {
-	/* TODO */
+	uint16_t tmp16;
+
+	tmp16 = ctx->a - val - get_flag(ctx, FLAG_C);
+	ctx->a = tmp16 & 0xff;
+	set_flag_to(ctx, FLAG_C, (tmp16 & 0x100) != 0);
+	set_flag_to(ctx, FLAG_P, parity_table[ctx->a]);
+	/* set_flag_to(ctx, FLAG_AC, ); */
+	set_flag_to(ctx, FLAG_Z, ctx->a == 0);
+	set_flag_to(ctx, FLAG_S, (ctx->a & 0x80) != 0);
 }
 
 static inline void
 op_ana(struct i8080 *ctx, uint8_t val)
 {
-	/* TODO */
+	uint8_t tmp8;
+
+	tmp8 = ctx->a & val;
+	clr_flag(ctx, FLAG_C);
+	set_flag_to(ctx, FLAG_P, parity_table[tmp8]);
+	set_flag_to(ctx, FLAG_AC, ((ctx->a | val) & 0x08) != 0);
+	set_flag_to(ctx, FLAG_Z, tmp8 == 0);
+	set_flag_to(ctx, FLAG_S, (tmp8 & 0x80) != 0);
+	ctx->a = tmp8;
 }
 
 static inline void
 op_xra(struct i8080 *ctx, uint8_t val)
 {
-	/* TODO */
+	uint8_t tmp8;
+
+	tmp8 = ctx->a ^ val;
+	clr_flag(ctx, FLAG_C);
+	set_flag_to(ctx, FLAG_P, parity_table[tmp8]);
+	clr_flag(ctx, FLAG_AC);
+	set_flag_to(ctx, FLAG_Z, tmp8 == 0);
+	set_flag_to(ctx, FLAG_S, (tmp8 & 0x80) != 0);
+	ctx->a = tmp8;
 }
 
 static inline void
 op_ora(struct i8080 *ctx, uint8_t val)
 {
-	/* TODO */
+	uint8_t tmp8;
+
+	tmp8 = ctx->a | val;
+	clr_flag(ctx, FLAG_C);
+	set_flag_to(ctx, FLAG_P, parity_table[tmp8]);
+	clr_flag(ctx, FLAG_AC);
+	set_flag_to(ctx, FLAG_Z, tmp8 == 0);
+	set_flag_to(ctx, FLAG_S, (tmp8 & 0x80) != 0);
+	ctx->a = tmp8;
 }
 
 static inline void
 op_cmp(struct i8080 *ctx, uint8_t val)
 {
-	/* TODO */
+	uint16_t tmp16;
+
+	tmp16 = ctx->a - val;
+	set_flag_to(ctx, FLAG_C, (tmp16 & 0x100) != 0);
+	set_flag_to(ctx, FLAG_P, parity_table[tmp16 & 0xff]);
+	/* set_flag_to(ctx, FLAG_AC, ); */
+	set_flag_to(ctx, FLAG_Z, (tmp16 & 0xff) == 0);
+	set_flag_to(ctx, FLAG_S, (tmp16 & 0x80) != 0);
+}
+
+static inline uint8_t
+op_inr(struct i8080 *ctx, uint8_t val)
+{
+	uint8_t tmp8;
+
+	tmp8 = val + 1;
+	set_flag_to(ctx, FLAG_P, parity_table[tmp8]);
+	set_flag_to(ctx, FLAG_AC, (tmp8 & 0x0f) == 0);
+	set_flag_to(ctx, FLAG_Z, tmp8 == 0);
+	set_flag_to(ctx, FLAG_S, (tmp8 & 0x80) != 0);
+	return tmp8;
+}
+
+static inline uint8_t
+op_dcr(struct i8080 *ctx, uint8_t val)
+{
+	uint8_t tmp8;
+
+	tmp8 = val - 1;
+	set_flag_to(ctx, FLAG_P, parity_table[tmp8]);
+	set_flag_to(ctx, FLAG_AC, !((tmp8 & 0x0f) == 0x0f));
+	set_flag_to(ctx, FLAG_Z, tmp8 == 0);
+	set_flag_to(ctx, FLAG_S, (tmp8 & 0x80) != 0);
+	return tmp8;
+}
+
+static inline void
+op_dad(struct i8080 *ctx, uint16_t val)
+{
+	uint32_t tmp32;
+
+	tmp32 = get_hl(ctx) + val;
+	set_flag_to(ctx, FLAG_C, (tmp32 & 0x10000) != 0);
+	set_hl(ctx, tmp32 & 0xffff);
+}
+
+static inline void
+op_rlc(struct i8080 *ctx)
+{
+	set_flag_to(ctx, FLAG_C, (ctx->a & 0x80) != 0);
+	ctx->a = (ctx->a << 1) | get_flag(ctx, FLAG_C);
+}
+
+static inline void
+op_rrc(struct i8080 *ctx)
+{
+	set_flag_to(ctx, FLAG_C, ctx->a & 0x01);
+	ctx->a = (ctx->a >> 1) | (get_flag(ctx, FLAG_C) << 7);
+}
+
+static inline void
+op_ral(struct i8080 *ctx)
+{
+	uint8_t tmp8;
+
+	tmp8 = get_flag(ctx, FLAG_C);
+	set_flag_to(ctx, FLAG_C, (ctx->a & 0x80) != 0);
+	ctx->a = (ctx->a << 1) | tmp8;
+}
+
+static inline void
+op_rar(struct i8080 *ctx)
+{
+	uint8_t tmp8;
+
+	tmp8 = get_flag(ctx, FLAG_C);
+	set_flag_to(ctx, FLAG_C, ctx->a & 0x01);
+	ctx->a = (ctx->a >> 1) | (tmp8 << 7);
 }
 
 void
@@ -241,6 +403,7 @@ i8080_init(struct i8080 *ctx)
 	ctx->sp = 0;
 	ctx->pc = 0;
 	ctx->halted = 0;
+	ctx->int_enable = 0;
 	ctx->cycles = 0;
 	ctx->opaque = NULL;
 	ctx->read_byte = NULL;
@@ -282,51 +445,244 @@ i8080_exec_opcode(struct i8080 *ctx, uint8_t opcode)
 			set_bc(ctx, fetch_word(ctx));
 			ctx->cycles += 10;
 			break;
+		case 0x02: /* STAX B */
+			write_word(ctx, get_bc(ctx), ctx->a);
+			ctx->cycles += 7;
+			break;
+		case 0x03: /* INX B */
+			set_bc(ctx, get_bc(ctx) + 1);
+			ctx->cycles += 5;
+			break;
+		case 0x04: /* INR B */
+			ctx->b = op_inr(ctx, ctx->b);
+			ctx->cycles += 5;
+			break;
+		case 0x05: /* DCR B */
+			ctx->b = op_dcr(ctx, ctx->b);
+			ctx->cycles += 5;
+			break;
 		case 0x06: /* MVI B */
 			ctx->b = fetch_byte(ctx);
 			ctx->cycles += 7;
+			break;
+		case 0x07: /* RLC */
+			op_rlc(ctx);
+			ctx->cycles += 4;
+			break;
+		case 0x08: /* NOP (Undocumented) */
+			ctx->cycles += 4;
+			break;
+		case 0x09: /* DAD B */
+			op_dad(ctx, get_bc(ctx));
+			ctx->cycles += 10;
+			break;
+		case 0x0a: /* LDAX B */
+			ctx->a = read_word(ctx, get_bc(ctx));
+			ctx->cycles += 7;
+			break;
+		case 0x0b: /* DCX B */
+			set_bc(ctx, get_bc(ctx) - 1);
+			ctx->cycles += 5;
+			break;
+		case 0x0c: /* INR C */
+			ctx->c = op_inr(ctx, ctx->c);
+			ctx->cycles += 5;
+			break;
+		case 0x0d: /* DCR C */
+			ctx->c = op_dcr(ctx, ctx->c);
+			ctx->cycles += 5;
 			break;
 		case 0x0e: /* MVI C */
 			ctx->c = fetch_byte(ctx);
 			ctx->cycles += 7;
 			break;
+		case 0x0f: /* RRC */
+			op_rrc(ctx);
+			ctx->cycles += 4;
+			break;
+		case 0x10: /* NOP (Undocumented) */
+			ctx->cycles += 4;
+			break;
 		case 0x11: /* LXI D */
 			set_de(ctx, fetch_word(ctx));
 			ctx->cycles += 10;
+			break;
+		case 0x12: /* STAX D */
+			write_word(ctx, get_de(ctx), ctx->a);
+			ctx->cycles += 7;
+			break;
+		case 0x13: /* INX D */
+			set_de(ctx, get_de(ctx) + 1);
+			ctx->cycles += 5;
+			break;
+		case 0x14: /* INR D */
+			ctx->d = op_inr(ctx, ctx->d);
+			ctx->cycles += 5;
+			break;
+		case 0x15: /* DCR D */
+			ctx->d = op_dcr(ctx, ctx->d);
+			ctx->cycles += 5;
 			break;
 		case 0x16: /* MVI D */
 			ctx->d = fetch_byte(ctx);
 			ctx->cycles += 7;
 			break;
+		case 0x17: /* RAL */
+			op_ral(ctx);
+			ctx->cycles += 4;
+			break;
+		case 0x18: /* NOP (Undocumented) */
+			ctx->cycles += 4;
+			break;
+		case 0x19: /* DAD D */
+			op_dad(ctx, get_de(ctx));
+			ctx->cycles += 10;
+			break;
+		case 0x1a: /* LDAX D */
+			ctx->a = read_word(ctx, get_de(ctx));
+			ctx->cycles += 7;
+			break;
+		case 0x1b: /* DCX D */
+			set_de(ctx, get_de(ctx) - 1);
+			ctx->cycles += 5;
+			break;
+		case 0x1c: /* INR E */
+			ctx->e = op_inr(ctx, ctx->e);
+			ctx->cycles += 5;
+			break;
+		case 0x1d: /* DCR E */
+			ctx->e = op_dcr(ctx, ctx->e);
+			ctx->cycles += 5;
+			break;
 		case 0x1e: /* MVI E */
 			ctx->e = fetch_byte(ctx);
 			ctx->cycles += 7;
+			break;
+		case 0x1f: /* RAR */
+			op_rar(ctx);
+			ctx->cycles += 4;
+			break;
+		case 0x20: /* NOP (Undocumented) */
+			ctx->cycles += 4;
 			break;
 		case 0x21: /* LXI H */
 			set_hl(ctx, fetch_word(ctx));
 			ctx->cycles += 10;
 			break;
+		case 0x22: /* SHLD */
+			write_word(ctx, fetch_word(ctx), get_hl(ctx));
+			ctx->cycles += 16;
+			break;
+		case 0x23: /* INX H */
+			set_hl(ctx, get_hl(ctx) + 1);
+			ctx->cycles += 5;
+			break;
+		case 0x24: /* INR H */
+			ctx->h = op_inr(ctx, ctx->h);
+			ctx->cycles += 5;
+			break;
+		case 0x25: /* DCR H */
+			ctx->h = op_dcr(ctx, ctx->h);
+			ctx->cycles += 5;
+			break;
 		case 0x26: /* MVI H */
 			ctx->h = fetch_byte(ctx);
 			ctx->cycles += 7;
+			break;
+		case 0x28: /* NOP (Undocumented) */
+			ctx->cycles += 4;
+			break;
+		case 0x29: /* DAD H */
+			op_dad(ctx, get_hl(ctx));
+			ctx->cycles += 10;
+			break;
+		case 0x2a: /* LHLD */
+			set_hl(ctx, read_word(ctx, fetch_word(ctx)));
+			ctx->cycles += 16;
+			break;
+		case 0x2b: /* DCX H */
+			set_hl(ctx, get_hl(ctx) - 1);
+			ctx->cycles += 5;
+			break;
+		case 0x2c: /* INR L */
+			ctx->l = op_inr(ctx, ctx->l);
+			ctx->cycles += 5;
+			break;
+		case 0x2d: /* DCR L */
+			ctx->l = op_dcr(ctx, ctx->l);
+			ctx->cycles += 5;
 			break;
 		case 0x2e: /* MVI L */
 			ctx->l = fetch_byte(ctx);
 			ctx->cycles += 7;
 			break;
+		case 0x30: /* NOP (Undocumented) */
+			ctx->cycles += 4;
+			break;
 		case 0x31: /* LXI SP */
 			ctx->sp = fetch_word(ctx);
+			ctx->cycles += 10;
+			break;
+		case 0x32: /* STA */
+			write_word(ctx, fetch_word(ctx), ctx->a);
+			ctx->cycles += 13;
+			break;
+		case 0x33: /* INX SP */
+			ctx->sp++;
+			ctx->cycles += 5;
+			break;
+		case 0x34: /* INR M */
+			write_byte(ctx, get_hl(ctx), op_inr(ctx,
+						read_byte(ctx, get_hl(ctx))));
+			ctx->cycles += 10;
+			break;
+		case 0x35: /* DCR M */
+			write_byte(ctx, get_hl(ctx), op_dcr(ctx,
+						read_byte(ctx, get_hl(ctx))));
 			ctx->cycles += 10;
 			break;
 		case 0x36: /* MVI M */
 			write_byte(ctx, get_hl(ctx), fetch_byte(ctx));
 			ctx->cycles += 10;
 			break;
+		case 0x37: /* STC */
+			set_flag(ctx, FLAG_C);
+			ctx->cycles += 4;
+			break;
+		case 0x38: /* NOP (Undocumented) */
+			ctx->cycles += 4;
+			break;
+		case 0x39: /* DAD SP */
+			op_dad(ctx, ctx->sp);
+			ctx->cycles += 10;
+			break;
+		case 0x3a: /* LDA */
+			ctx->a = read_word(ctx, fetch_word(ctx));
+			ctx->cycles += 13;
+			break;
+		case 0x3b: /* DCX SP */
+			ctx->sp--;
+			ctx->cycles += 5;
+			break;
+		case 0x3c: /* INR A */
+			ctx->a = op_inr(ctx, ctx->a);
+			ctx->cycles += 5;
+			break;
+		case 0x3d: /* DCR A */
+			ctx->a = op_dcr(ctx, ctx->a);
+			ctx->cycles += 5;
+			break;
 		case 0x3e: /* MVI A */
 			ctx->a = fetch_byte(ctx);
 			ctx->cycles += 7;
 			break;
-
+		case 0x3f: /* CMC */
+			if (get_flag(ctx, FLAG_C) == 0)
+				clr_flag(ctx, FLAG_C);
+			else
+				set_flag(ctx, FLAG_C);
+			ctx->cycles += 4;
+			break;
 		case 0x40: /* MOV B, B */
 			ctx->b = ctx->b;
 			ctx->cycles += 5;
@@ -839,33 +1195,301 @@ i8080_exec_opcode(struct i8080 *ctx, uint8_t opcode)
 			op_cmp(ctx, ctx->a);
 			ctx->cycles += 4;
 			break;
+		case 0xc0: /* RNZ */
+			if (get_flag(ctx, FLAG_Z) == 0) {
+				op_ret(ctx);
+				ctx->cycles += 11;
+			} else {
+				ctx->cycles += 5;
+			}
+			break;
+		case 0xc1: /* POP B */
+			set_bc(ctx, pop_word(ctx));
+			ctx->cycles += 10;
+			break;
+		case 0xc2: /* JNZ */
+			if (get_flag(ctx, FLAG_Z) == 0)
+				op_jmp(ctx);
+			else
+				ctx->pc += 2;
+			ctx->cycles += 10;
+			break;
 		case 0xc3: /* JMP */
 			op_jmp(ctx);
 			ctx->cycles += 10;
+			break;
+		case 0xc4: /* CNZ */
+			if (get_flag(ctx, FLAG_Z) == 0) {
+				op_call(ctx);
+				ctx->cycles += 17;
+			} else {
+				ctx->pc += 2;
+				ctx->cycles += 11;
+			}
+			break;
+		case 0xc5: /* PUSH B */
+			push_word(ctx, get_bc(ctx));
+			ctx->cycles += 11;
+			break;
+		case 0xc6: /* ADI */
+			op_add(ctx, fetch_byte(ctx));
+			ctx->cycles += 7;
+			break;
+		case 0xc8: /* RZ */
+			if (get_flag(ctx, FLAG_Z) != 0) {
+				op_ret(ctx);
+				ctx->cycles += 11;
+			} else {
+				ctx->cycles += 5;
+			}
 			break;
 		case 0xc9: /* RET */
 			op_ret(ctx);
 			ctx->cycles += 10;
 			break;
+		case 0xca: /* JZ */
+			if (get_flag(ctx, FLAG_Z) != 0)
+				op_jmp(ctx);
+			else
+				ctx->pc += 2;
+			ctx->cycles += 10;
+			break;
+		case 0xcc: /* CZ */
+			if (get_flag(ctx, FLAG_Z) != 0) {
+				op_call(ctx);
+				ctx->cycles += 17;
+			} else {
+				ctx->pc += 2;
+				ctx->cycles += 11;
+			}
+			break;
 		case 0xcd: /* CALL */
 			op_call(ctx);
 			ctx->cycles += 17;
 			break;
+		case 0xce: /* ACI */
+			op_adc(ctx, fetch_byte(ctx));
+			ctx->cycles += 7;
+			break;
+		case 0xd0: /* RNC */
+			if (get_flag(ctx, FLAG_C) == 0) {
+				op_ret(ctx);
+				ctx->cycles += 11;
+			} else {
+				ctx->cycles += 5;
+			}
+			break;
 		case 0xd1: /* POP D */
 			set_de(ctx, pop_word(ctx));
+			ctx->cycles += 10;
+			break;
+		case 0xd2: /* JNC */
+			if (get_flag(ctx, FLAG_C) == 0)
+				op_jmp(ctx);
+			else
+				ctx->pc += 2;
 			ctx->cycles += 10;
 			break;
 		case 0xd3: /* OUT */
 			ctx->io_outb(ctx->opaque, fetch_byte(ctx), ctx->a);
 			ctx->cycles += 10;
 			break;
+		case 0xd4: /* CNC */
+			if (get_flag(ctx, FLAG_C) == 0) {
+				op_call(ctx);
+				ctx->cycles += 17;
+			} else {
+				ctx->pc += 2;
+				ctx->cycles += 11;
+			}
+			break;
 		case 0xd5: /* PUSH D */
 			push_word(ctx, get_de(ctx));
 			ctx->cycles += 11;
 			break;
+		case 0xd6: /* SUI */
+			op_sub(ctx, fetch_byte(ctx));
+			ctx->cycles += 7;
+			break;
+		case 0xd8: /* RC */
+			if (get_flag(ctx, FLAG_C) != 0) {
+				op_ret(ctx);
+				ctx->cycles += 11;
+			} else {
+				ctx->cycles += 5;
+			}
+			break;
+		case 0xda: /* JC */
+			if (get_flag(ctx, FLAG_C) != 0)
+				op_jmp(ctx);
+			else
+				ctx->pc += 2;
+			ctx->cycles += 10;
+			break;
+		case 0xdc: /* CC */
+			if (get_flag(ctx, FLAG_C) != 0) {
+				op_call(ctx);
+				ctx->cycles += 17;
+			} else {
+				ctx->pc += 2;
+				ctx->cycles += 11;
+			}
+			break;
+		case 0xde: /* SBI */
+			op_sbb(ctx, fetch_byte(ctx));
+			ctx->cycles += 7;
+			break;
+		case 0xe0: /* RPO */
+			if (get_flag(ctx, FLAG_P) == 0) {
+				op_ret(ctx);
+				ctx->cycles += 11;
+			} else {
+				ctx->cycles += 5;
+			}
+			break;
+		case 0xe1: /* POP H */
+			set_hl(ctx, pop_word(ctx));
+			ctx->cycles += 10;
+			break;
+		case 0xe2: /* JPO */
+			if (get_flag(ctx, FLAG_P) == 0)
+				op_jmp(ctx);
+			else
+				ctx->pc += 2;
+			ctx->cycles += 10;
+			break;
+		case 0xe3: /* XTHL */
+			op_xthl(ctx);
+			ctx->cycles += 18;
+			break;
+		case 0xe4: /* CPO */
+			if (get_flag(ctx, FLAG_P) == 0) {
+				op_call(ctx);
+				ctx->cycles += 17;
+			} else {
+				ctx->pc += 2;
+				ctx->cycles += 11;
+			}
+			break;
+		case 0xe5: /* PUSH H */
+			push_word(ctx, get_hl(ctx));
+			ctx->cycles += 11;
+			break;
+		case 0xe6: /* ANI */
+			op_ana(ctx, fetch_byte(ctx));
+			ctx->cycles += 7;
+			break;
+		case 0xe8: /* RPE */
+			if (get_flag(ctx, FLAG_P) != 0) {
+				op_ret(ctx);
+				ctx->cycles += 11;
+			} else {
+				ctx->cycles += 5;
+			}
+			break;
+		case 0xe9: /* PCHL */
+			ctx->pc = get_hl(ctx);
+			ctx->cycles += 5;
+			break;
+		case 0xea: /* JPE */
+			if (get_flag(ctx, FLAG_P) != 0)
+				op_jmp(ctx);
+			else
+				ctx->pc += 2;
+			ctx->cycles += 10;
+			break;
 		case 0xeb: /* XCHG */
 			op_xchg(ctx);
 			ctx->cycles += 5;
+			break;
+		case 0xec: /* CPE */
+			if (get_flag(ctx, FLAG_P) != 0) {
+				op_call(ctx);
+				ctx->cycles += 17;
+			} else {
+				ctx->pc += 2;
+				ctx->cycles += 11;
+			}
+			break;
+		case 0xee: /* XRI */
+			op_xra(ctx, fetch_byte(ctx));
+			ctx->cycles += 7;
+			break;
+		case 0xf0: /* RP */
+			if (get_flag(ctx, FLAG_S) == 0) {
+				op_ret(ctx);
+				ctx->cycles += 11;
+			} else {
+				ctx->cycles += 5;
+			}
+			break;
+		case 0xf1: /* POP PSW */
+			set_psw(ctx, pop_word(ctx));
+			ctx->cycles += 10;
+			break;
+		case 0xf2: /* JP */
+			if (get_flag(ctx, FLAG_S) == 0)
+				op_jmp(ctx);
+			else
+				ctx->pc += 2;
+			ctx->cycles += 10;
+			break;
+		case 0xf3: /* DI */
+			ctx->int_enable = 0;
+			ctx->cycles += 4;
+			break;
+		case 0xf4: /* CP */
+			if (get_flag(ctx, FLAG_S) == 0) {
+				op_call(ctx);
+				ctx->cycles += 17;
+			} else {
+				ctx->pc += 2;
+				ctx->cycles += 11;
+			}
+			break;
+		case 0xf5: /* PUSH PSW */
+			push_word(ctx, get_psw(ctx));
+			ctx->cycles += 11;
+			break;
+		case 0xf6: /* ORI */
+			op_ora(ctx, fetch_byte(ctx));
+			ctx->cycles += 7;
+			break;
+		case 0xf8: /* RM */
+			if (get_flag(ctx, FLAG_S) != 0) {
+				op_ret(ctx);
+				ctx->cycles += 11;
+			} else {
+				ctx->cycles += 5;
+			}
+			break;
+		case 0xf9: /* SPHL */
+			ctx->sp = get_hl(ctx);
+			ctx->cycles += 5;
+			break;
+		case 0xfa: /* JM */
+			if (get_flag(ctx, FLAG_S) != 0)
+				op_jmp(ctx);
+			else
+				ctx->pc += 2;
+			ctx->cycles += 10;
+			break;
+		case 0xfb: /* EI */
+			ctx->int_enable = 1;
+			ctx->cycles += 4;
+			break;
+		case 0xfc: /* CM */
+			if (get_flag(ctx, FLAG_S) != 0) {
+				op_call(ctx);
+				ctx->cycles += 17;
+			} else {
+				ctx->pc += 2;
+				ctx->cycles += 11;
+			}
+			break;
+		case 0xfe: /* CPI */
+			op_cmp(ctx, fetch_byte(ctx));
+			ctx->cycles += 7;
 			break;
 		default:
 			fprintf(stderr, "0x%02x: Unimplemented opcode.\n",
@@ -874,3 +1498,4 @@ i8080_exec_opcode(struct i8080 *ctx, uint8_t opcode)
 			exit(1);
 	}
 }
+

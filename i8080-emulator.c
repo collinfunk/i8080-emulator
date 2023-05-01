@@ -31,6 +31,7 @@ main(int argc, char **argv)
 	struct emulator *emu;
 	struct i8080 *cpu;
 	uint8_t opcode;
+	int i;
 
 	if (argc != 2)
 		usage();
@@ -51,10 +52,21 @@ main(int argc, char **argv)
 	/* RET */
 	emu->memory[0x0007] = 0xc9;
 
-	for (;;) {
+	/* Fill with HLT's to stop program when test is finished. */
+	for (i = 0; i < 5; ++i)
+		emu->memory[i] = 0x76;
+	for (i = 8; i < 0x100; ++i)
+		emu->memory[i] = 0x76;
+
+	for (cpu->halted = 0; cpu->halted == 0;) {
 		opcode = emulator_read_byte(cpu->opaque, cpu->pc++);
 		i8080_exec_opcode(cpu, opcode);
 	}
+
+	/* Print state in case halt was on a test failing. */
+	printf("\n");
+	printf("Last opcode: 0x%02x\n", opcode);
+	i8080_print_state(cpu);
 
 	emulator_destroy(emu);
 	return 0;
@@ -127,7 +139,8 @@ emulator_load_file(struct emulator *emu, const char *name, uint16_t offset)
 	}
 
 	if (st.st_size + offset > UINT16_MAX) {
-		fprintf(stderr, "%s: Offset too large to address file.\n");
+		fprintf(stderr, "%s: Offset too large to address file.\n",
+				name);
 		goto err0;
 	}
 

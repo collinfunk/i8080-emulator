@@ -16,6 +16,7 @@ struct i8080 {
 	uint16_t sp;
 	uint16_t pc;
 	uint8_t halted;
+	uint8_t int_enable;
 	uint64_t cycles;
 	void *opaque;
 	uint8_t (*read_byte)(void *, uint16_t);
