@@ -61,6 +61,12 @@ main(int argc, char **argv)
 	for (cpu->halted = 0; cpu->halted == 0;) {
 		opcode = emulator_read_byte(cpu->opaque, cpu->pc++);
 		i8080_exec_opcode(cpu, opcode);
+
+		if ((cpu->f & 0x02) == 0 || (cpu->f & 0x08) != 0) {
+			printf("\nOPCODE: 0x%02x\n", opcode);
+			i8080_print_state(cpu);
+			goto fail;
+		}
 	}
 
 	/* Print state in case halt was on a test failing. */

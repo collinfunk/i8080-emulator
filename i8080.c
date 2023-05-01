@@ -1425,6 +1425,9 @@ i8080_exec_opcode(struct i8080 *ctx, uint8_t opcode)
 			break;
 		case 0xf1: /* POP PSW */
 			set_psw(ctx, pop_word(ctx));
+			ctx->f |= 0x02;
+			ctx->f &= ~0x08;
+			ctx->f &= ~0x20;
 			ctx->cycles += 10;
 			break;
 		case 0xf2: /* JP */
@@ -1448,6 +1451,9 @@ i8080_exec_opcode(struct i8080 *ctx, uint8_t opcode)
 			}
 			break;
 		case 0xf5: /* PUSH PSW */
+			ctx->f |= 0x02;
+			ctx->f &= ~0x08;
+			ctx->f &= ~0x20;
 			push_word(ctx, get_psw(ctx));
 			ctx->cycles += 11;
 			break;
