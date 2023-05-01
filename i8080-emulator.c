@@ -30,6 +30,7 @@ main(int argc, char **argv)
 {
 	struct emulator *emu;
 	struct i8080 *cpu;
+	uint8_t opcode;
 
 	if (argc != 2)
 		usage();
@@ -44,6 +45,16 @@ main(int argc, char **argv)
 	if (emulator_load_file(emu, argv[1], 0x100) < 0)
 		goto fail;
 
+	/* Substitute CP/M BDOS calls with an OUT 1 followed by a RET. */
+	emu->memory[0x0005] = 0xd3;
+	emu->memory[0x0006] = 0x01;
+	/* RET */
+	emu->memory[0x0007] = 0xc9;
+
+	for (;;) {
+		opcode = emulator_read_byte(cpu->opaque, cpu->pc++);
+		i8080_exec_opcode(cpu, opcode);
+	}
 
 	emulator_destroy(emu);
 	return 0;
@@ -176,9 +187,32 @@ emulator_io_outb(void *emuptr, uint8_t port)
 	return 0;
 }
 
+/*
+ * Handles the output port from the CPU. This is used to replace
+ * CP/M BDOS system calls used by the test binaries. The tests use
+ * functions 5 and 9. Function 5 is used when the 8-bit register C contains
+ * 2. This function prints the ASCII character stored in E to the screen.
+ * Function 9 sends a memory address to a string in the 16-bit register
+ * DE. Characters a read and printed until a terminating $ character.
+ */
 static void
 emulator_io_inb(void *emuptr, uint8_t port, uint8_t val)
 {
-
+	struct emulator *emu = emuptr;
+	struct i8080 *cpu = &emu->cpu;
+	uint16_t de;
+	uint8_t ch;
+	if (port != 1)
+		return;
+	if (cpu->c == 2) {
+		putchar(cpu->e);
+	} else if (cpu->c == 9) {
+		de = ((uint16_t)cpu->d << 8) | ((uint16_t)cpu->e);
+		ch = emulator_read_byte(cpu->opaque, de++);
+		while (ch != '$') {
+			putchar(ch);
+			ch = emulator_read_byte(cpu->opaque, de++);
+		}
+	}
 }
 

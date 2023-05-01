@@ -1,8 +1,16 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 #include "i8080.h"
+
+#define FLAG_C  0x01
+#define FLAG_P  0x04
+#define FLAG_AC 0x10
+#define FLAG_Z  0x40
+#define FLAG_S  0x80
 
 static inline void
 set_flag(struct i8080 *ctx, uint8_t mask)
@@ -118,11 +126,57 @@ fetch_byte(struct i8080 *ctx)
 static inline uint16_t
 fetch_word(struct i8080 *ctx)
 {
-	uint8_t w;
+	uint16_t w;
 
 	w = read_word(ctx, ctx->pc);
 	ctx->pc += 2;
 	return w;
+}
+
+static inline uint16_t
+pop_word(struct i8080 *ctx)
+{
+	uint16_t w;
+
+	w = read_word(ctx, ctx->sp);
+	ctx->sp += 2;
+	return w;
+}
+
+static inline void
+push_word(struct i8080 *ctx, uint16_t val)
+{
+	ctx->sp -= 2;
+	write_word(ctx, ctx->sp, val);
+}
+
+static inline void
+op_jmp(struct i8080 *ctx)
+{
+	ctx->pc = fetch_word(ctx);
+}
+
+static inline void
+op_call(struct i8080 *ctx)
+{
+	push_word(ctx, ctx->pc + 2);
+	ctx->pc = fetch_word(ctx);
+}
+
+static inline void
+op_ret(struct i8080 *ctx)
+{
+	ctx->pc = pop_word(ctx);
+}
+
+static inline void
+op_xchg(struct i8080 *ctx)
+{
+	uint16_t tmp16;
+
+	tmp16 = get_hl(ctx);
+	set_hl(ctx, get_de(ctx));
+	set_de(ctx, tmp16);
 }
 
 void
@@ -147,3 +201,115 @@ i8080_init(struct i8080 *ctx)
 	ctx->io_outb = NULL;
 }
 
+void
+i8080_print_state(struct i8080 *ctx)
+{
+
+	printf("FLAGS: S Z 0 A 0 P 1 C\n");
+	printf("       %u %u %u %u %u %u %u %u\n",
+			get_flag(ctx, FLAG_S), get_flag(ctx, FLAG_Z),
+			get_flag(ctx, 0x20), get_flag(ctx, FLAG_AC),
+			get_flag(ctx, 0x08), get_flag(ctx, FLAG_P),
+			get_flag(ctx, 0x02), get_flag(ctx, FLAG_C));
+	printf("PC:  0x%04x SP: 0x%04x\n", ctx->pc, ctx->sp);
+	printf("PSW: 0x%04x (A: 0x%02x F: 0x%02x)\n", get_psw(ctx),
+			ctx->a, ctx->f);
+	printf("BC:  0x%04x (B: 0x%02x C: 0x%02x)\n", get_bc(ctx),
+			ctx->b, ctx->c);
+	printf("DE:  0x%04x (D: 0x%02x E: 0x%02x)\n", get_de(ctx),
+			ctx->d, ctx->e);
+	printf("HL:  0x%04x (H: 0x%02x L: 0x%02x)\n", get_hl(ctx),
+			ctx->h, ctx->l);
+	printf("TOTAL CYCLES: %ju\n", (uintmax_t)ctx->cycles);
+}
+
+void
+i8080_exec_opcode(struct i8080 *ctx, uint8_t opcode)
+{
+	switch (opcode) {
+		case 0x00: /* NOP */
+			ctx->cycles += 4;
+			break;
+		case 0x01: /* LXI B */
+			set_bc(ctx, fetch_word(ctx));
+			ctx->cycles += 10;
+			break;
+		case 0x06: /* MVI B */
+			ctx->b = fetch_byte(ctx);
+			ctx->cycles += 7;
+			break;
+		case 0x0e: /* MVI C */
+			ctx->c = fetch_byte(ctx);
+			ctx->cycles += 7;
+			break;
+		case 0x11: /* LXI D */
+			set_de(ctx, fetch_word(ctx));
+			ctx->cycles += 10;
+			break;
+		case 0x16: /* MVI D */
+			ctx->d = fetch_byte(ctx);
+			ctx->cycles += 7;
+			break;
+		case 0x1e: /* MVI E */
+			ctx->e = fetch_byte(ctx);
+			ctx->cycles += 7;
+			break;
+		case 0x21: /* LXI H */
+			set_hl(ctx, fetch_word(ctx));
+			ctx->cycles += 10;
+			break;
+		case 0x26: /* MVI H */
+			ctx->h = fetch_byte(ctx);
+			ctx->cycles += 7;
+			break;
+		case 0x2e: /* MVI L */
+			ctx->l = fetch_byte(ctx);
+			ctx->cycles += 7;
+			break;
+		case 0x31: /* LXI SP */
+			ctx->sp = fetch_word(ctx);
+			ctx->cycles += 10;
+			break;
+		case 0x36: /* MVI M */
+			write_byte(ctx, get_hl(ctx), fetch_byte(ctx));
+			ctx->cycles += 10;
+			break;
+		case 0x3e: /* MVI A */
+			ctx->a = fetch_byte(ctx);
+			ctx->cycles += 7;
+			break;
+		case 0xc3: /* JMP */
+			op_jmp(ctx);
+			ctx->cycles += 10;
+			break;
+		case 0xc9: /* RET */
+			op_ret(ctx);
+			ctx->cycles += 10;
+			break;
+		case 0xcd: /* CALL */
+			op_call(ctx);
+			ctx->cycles += 17;
+			break;
+		case 0xd1: /* POP D */
+			set_de(ctx, pop_word(ctx));
+			ctx->cycles += 10;
+			break;
+		case 0xd3: /* OUT */
+			ctx->io_outb(ctx->opaque, fetch_byte(ctx), ctx->a);
+			ctx->cycles += 10;
+			break;
+		case 0xd5: /* PUSH D */
+			push_word(ctx, get_de(ctx));
+			ctx->cycles += 11;
+			break;
+		case 0xeb: /* XCHG */
+			op_xchg(ctx);
+			ctx->cycles += 5;
+			break;
+		default:
+			fprintf(stderr, "0x%02x: Unimplemented opcode.\n",
+					opcode);
+			i8080_print_state(ctx);
+			exit(1);
+	}
+}
