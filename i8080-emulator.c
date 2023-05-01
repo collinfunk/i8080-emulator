@@ -221,6 +221,7 @@ emulator_io_inb(void *emuptr, uint8_t port, uint8_t val)
 	struct i8080 *cpu = &emu->cpu;
 	uint16_t de;
 	uint8_t ch;
+
 	if (port != 1)
 		return;
 	if (cpu->c == 2) {
