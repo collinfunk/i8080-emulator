@@ -83,6 +83,48 @@ set_hl(struct i8080 *ctx, uint16_t val)
 	ctx->l = val & 0xff;
 }
 
+static inline uint8_t
+read_byte(struct i8080 *ctx, uint16_t address)
+{
+	return ctx->read_byte(ctx->opaque, address);
+}
+
+static inline void
+write_byte(struct i8080 *ctx, uint16_t address, uint8_t val)
+{
+	ctx->write_byte(ctx->opaque, address, val);
+}
+
+static inline uint16_t
+read_word(struct i8080 *ctx, uint16_t address)
+{
+	return ((uint16_t)read_byte(ctx, address)) |
+		((uint16_t)read_byte(ctx, address + 1) << 8);
+}
+
+static inline void
+write_word(struct i8080 *ctx, uint16_t address, uint16_t val)
+{
+	write_byte(ctx, address, val & 0xff);
+	write_byte(ctx, address + 1, (val >> 8) & 0xff);
+}
+
+static inline uint8_t
+fetch_byte(struct i8080 *ctx)
+{
+	return read_byte(ctx, ctx->pc++);
+}
+
+static inline uint16_t
+fetch_word(struct i8080 *ctx)
+{
+	uint8_t w;
+
+	w = read_word(ctx, ctx->pc);
+	ctx->pc += 2;
+	return w;
+}
+
 void
 i8080_init(struct i8080 *ctx)
 {
@@ -98,5 +140,10 @@ i8080_init(struct i8080 *ctx)
 	ctx->pc = 0;
 	ctx->halted = 0;
 	ctx->cycles = 0;
+	ctx->opaque = NULL;
+	ctx->read_byte = NULL;
+	ctx->write_byte = NULL;
+	ctx->io_inb = NULL;
+	ctx->io_outb = NULL;
 }
 

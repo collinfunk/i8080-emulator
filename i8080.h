@@ -17,6 +17,11 @@ struct i8080 {
 	uint16_t pc;
 	uint8_t halted;
 	uint64_t cycles;
+	void *opaque;
+	uint8_t (*read_byte)(void *, uint16_t);
+	void (*write_byte)(void *, uint16_t, uint8_t);
+	uint8_t (*io_inb)(void *, uint8_t);
+	void (*io_outb)(void *, uint8_t, uint8_t);
 };
 
 void i8080_init(struct i8080 *);
