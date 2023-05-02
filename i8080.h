@@ -26,7 +26,7 @@ struct i8080 {
 };
 
 void i8080_init(struct i8080 *);
-void i8080_print_state(struct i8080 *);
+void i8080_step(struct i8080 *);
 void i8080_exec_opcode(struct i8080 *, uint8_t);
 
 #endif /* I8080_H */

@@ -30,11 +30,11 @@ main(int argc, char **argv)
 {
 	struct emulator *emu;
 	struct i8080 *cpu;
-	uint8_t opcode;
-	int i;
+	uint64_t opcount;
 
 	if (argc != 2)
 		usage();
+
 	emu = emulator_create();
 	if (emu == NULL) {
 		fprintf(stderr, "Failed to allocate memory.\n");
@@ -42,9 +42,11 @@ main(int argc, char **argv)
 	}
 
 	cpu = &emu->cpu;
-
 	if (emulator_load_file(emu, argv[1], 0x100) < 0)
 		goto fail;
+
+	/* Set the start of memory to HLT's for when the test finishes. */
+	memset(emu->memory, 0x76, 0x100);
 
 	/* Substitute CP/M BDOS calls with an OUT 1 followed by a RET. */
 	emu->memory[0x0005] = 0xd3;
@@ -52,28 +54,12 @@ main(int argc, char **argv)
 	/* RET */
 	emu->memory[0x0007] = 0xc9;
 
-	/* Fill with HLT's to stop program when test is finished. */
-	for (i = 0; i < 5; ++i)
-		emu->memory[i] = 0x76;
-	for (i = 8; i < 0x100; ++i)
-		emu->memory[i] = 0x76;
+	for (cpu->halted = opcount = 0; cpu->halted == 0; ++opcount)
+		i8080_step(cpu);
 
-	for (cpu->halted = 0; cpu->halted == 0;) {
-		opcode = emulator_read_byte(cpu->opaque, cpu->pc++);
-		i8080_exec_opcode(cpu, opcode);
-
-		if ((cpu->f & 0x02) == 0 || (cpu->f & 0x08) != 0) {
-			printf("\nOPCODE: 0x%02x\n", opcode);
-			i8080_print_state(cpu);
-			goto fail;
-		}
-	}
-
-	/* Print state in case halt was on a test failing. */
 	printf("\n");
-	printf("Last opcode: 0x%02x\n", opcode);
-	i8080_print_state(cpu);
-
+	printf("Instruction count: %ju\n", (uintmax_t)opcount);
+	printf("Cycle count:       %ju\n", (uintmax_t)cpu->cycles);
 	emulator_destroy(emu);
 	return 0;
 fail:

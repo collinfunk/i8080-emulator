@@ -6,12 +6,19 @@
 
 #include "i8080.h"
 
-#define FLAG_C  0x01
-#define FLAG_P  0x04
-#define FLAG_AC 0x10
-#define FLAG_Z  0x40
-#define FLAG_S  0x80
+#define FLAG_C  0x01 /* Carry flag */
+/* 0x02 is always set to 1. */
+#define FLAG_P  0x04 /* Parity flag */
+/* 0x08 is always set to 0. */
+#define FLAG_AC 0x10 /* Aux. carry flag */
+/* 0x20 is always set to 0. */
+#define FLAG_Z  0x40 /* Zero flag */
+#define FLAG_S  0x80 /* Sign flag */
 
+/*
+ * Parity lookup table. 1 for even parity, 0 for odd.
+ * This is generated from a file in /misc.
+ */
 static const uint8_t parity_table[256] = {
 	1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1,
 	0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0,
@@ -29,6 +36,20 @@ static const uint8_t parity_table[256] = {
 	0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0,
 	0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0,
 	1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1,
+};
+
+/*
+ * Tables used for setting the auxiliary carry bit in the flags
+ * register. The flag should be set when there is a carry out of bit 3.
+ * It is affected by all addition, subtraction, increment, decrement,
+ * and compare instructions.
+ */
+static const uint8_t ac_table[8] = {
+	0, 0, 1, 0, 1, 0, 1, 1
+};
+
+static const uint8_t subtract_ac_table[8] = {
+	1, 0, 0, 0, 1, 1, 1, 0
 };
 
 static inline void
@@ -219,12 +240,15 @@ static inline void
 op_add(struct i8080 *ctx, uint8_t val)
 {
 	uint16_t tmp16;
+	uint8_t acindex;
 
 	tmp16 = ctx->a + val;
-	set_flag_to(ctx, FLAG_AC, ((ctx->a & 0x0f) + (val & 0x0f)) & 0x10);
+	acindex = ((ctx->a & 0x88) >> 1) | ((val & 0x88) >> 2) |
+		((tmp16 & 0x88) >> 3);
 	ctx->a = tmp16 & 0xff;
 	set_flag_to(ctx, FLAG_C, (tmp16 & 0x100) != 0);
 	set_flag_to(ctx, FLAG_P, parity_table[ctx->a]);
+	set_flag_to(ctx, FLAG_AC, ac_table[acindex & 7]);
 	set_flag_to(ctx, FLAG_Z, ctx->a == 0);
 	set_flag_to(ctx, FLAG_S, (ctx->a & 0x80) != 0);
 }
@@ -233,13 +257,15 @@ static inline void
 op_adc(struct i8080 *ctx, uint8_t val)
 {
 	uint16_t tmp16;
+	uint8_t acindex;
 
 	tmp16 = ctx->a + val + get_flag(ctx, FLAG_C);
-	set_flag_to(ctx, FLAG_AC, ((ctx->a & 0x0f) + (val & 0x0f) +
-				(get_flag(ctx, FLAG_C) & 0x0f)) & 0x10);
+	acindex = ((ctx->a & 0x88) >> 1) | ((val & 0x88) >> 2) |
+		((tmp16 & 0x88) >> 3);
 	ctx->a = tmp16 & 0xff;
 	set_flag_to(ctx, FLAG_C, (tmp16 & 0x100) != 0);
 	set_flag_to(ctx, FLAG_P, parity_table[ctx->a]);
+	set_flag_to(ctx, FLAG_AC, ac_table[acindex & 7]);
 	set_flag_to(ctx, FLAG_Z, ctx->a == 0);
 	set_flag_to(ctx, FLAG_S, (ctx->a & 0x80) != 0);
 }
@@ -248,12 +274,15 @@ static inline void
 op_sub(struct i8080 *ctx, uint8_t val)
 {
 	uint16_t tmp16;
+	uint8_t acindex;
 
 	tmp16 = ctx->a - val;
-	set_flag_to(ctx, FLAG_AC, ((ctx->a & 0x0f) - (val & 0x0f)) & 0x10);
+	acindex = ((ctx->a & 0x88) >> 1) | ((val & 0x88) >> 2) |
+		((tmp16 & 0x88) >> 3);
 	ctx->a = tmp16 & 0xff;
 	set_flag_to(ctx, FLAG_C, (tmp16 & 0x100) != 0);
 	set_flag_to(ctx, FLAG_P, parity_table[ctx->a]);
+	set_flag_to(ctx, FLAG_AC, subtract_ac_table[acindex & 7]);
 	set_flag_to(ctx, FLAG_Z, ctx->a == 0);
 	set_flag_to(ctx, FLAG_S, (ctx->a & 0x80) != 0);
 }
@@ -262,13 +291,15 @@ static inline void
 op_sbb(struct i8080 *ctx, uint8_t val)
 {
 	uint16_t tmp16;
+	uint8_t acindex;
 
 	tmp16 = ctx->a - val - get_flag(ctx, FLAG_C);
-	set_flag_to(ctx, FLAG_AC, ((ctx->a & 0x0f) - (val & 0x0f) -
-				(get_flag(ctx, FLAG_C) & 0x0f)) & 0x10);
+	acindex = ((ctx->a & 0x88) >> 1) | ((val & 0x88) >> 2) |
+		((tmp16 & 0x88) >> 3);
 	ctx->a = tmp16 & 0xff;
 	set_flag_to(ctx, FLAG_C, (tmp16 & 0x100) != 0);
 	set_flag_to(ctx, FLAG_P, parity_table[ctx->a]);
+	set_flag_to(ctx, FLAG_AC, subtract_ac_table[acindex & 7]);
 	set_flag_to(ctx, FLAG_Z, ctx->a == 0);
 	set_flag_to(ctx, FLAG_S, (ctx->a & 0x80) != 0);
 }
@@ -319,11 +350,14 @@ static inline void
 op_cmp(struct i8080 *ctx, uint8_t val)
 {
 	uint16_t tmp16;
+	uint8_t acindex;
 
 	tmp16 = ctx->a - val;
+	acindex = ((ctx->a & 0x88) >> 1) | ((val & 0x88) >> 2) |
+		((tmp16 & 0x88) >> 3);
 	set_flag_to(ctx, FLAG_C, (tmp16 & 0x100) != 0);
 	set_flag_to(ctx, FLAG_P, parity_table[tmp16 & 0xff]);
-	/* set_flag_to(ctx, FLAG_AC, ); */
+	set_flag_to(ctx, FLAG_AC, subtract_ac_table[acindex & 7]);
 	set_flag_to(ctx, FLAG_Z, (tmp16 & 0xff) == 0);
 	set_flag_to(ctx, FLAG_S, (tmp16 & 0x80) != 0);
 }
@@ -444,25 +478,9 @@ i8080_init(struct i8080 *ctx)
 }
 
 void
-i8080_print_state(struct i8080 *ctx)
+i8080_step(struct i8080 *ctx)
 {
-
-	printf("FLAGS: S Z 0 A 0 P 1 C\n");
-	printf("       %u %u %u %u %u %u %u %u\n",
-			get_flag(ctx, FLAG_S), get_flag(ctx, FLAG_Z),
-			get_flag(ctx, 0x20), get_flag(ctx, FLAG_AC),
-			get_flag(ctx, 0x08), get_flag(ctx, FLAG_P),
-			get_flag(ctx, 0x02), get_flag(ctx, FLAG_C));
-	printf("PC:  0x%04x SP: 0x%04x\n", ctx->pc, ctx->sp);
-	printf("PSW: 0x%04x (A: 0x%02x F: 0x%02x)\n", get_psw(ctx),
-			ctx->a, ctx->f);
-	printf("BC:  0x%04x (B: 0x%02x C: 0x%02x)\n", get_bc(ctx),
-			ctx->b, ctx->c);
-	printf("DE:  0x%04x (D: 0x%02x E: 0x%02x)\n", get_de(ctx),
-			ctx->d, ctx->e);
-	printf("HL:  0x%04x (H: 0x%02x L: 0x%02x)\n", get_hl(ctx),
-			ctx->h, ctx->l);
-	printf("TOTAL CYCLES: %ju\n", (uintmax_t)ctx->cycles);
+	i8080_exec_opcode(ctx, fetch_byte(ctx));
 }
 
 void
@@ -477,7 +495,7 @@ i8080_exec_opcode(struct i8080 *ctx, uint8_t opcode)
 			ctx->cycles += 10;
 			break;
 		case 0x02: /* STAX B */
-			write_word(ctx, get_bc(ctx), ctx->a);
+			write_byte(ctx, get_bc(ctx), ctx->a);
 			ctx->cycles += 7;
 			break;
 		case 0x03: /* INX B */
@@ -509,7 +527,7 @@ i8080_exec_opcode(struct i8080 *ctx, uint8_t opcode)
 			ctx->cycles += 10;
 			break;
 		case 0x0a: /* LDAX B */
-			ctx->a = read_word(ctx, get_bc(ctx));
+			ctx->a = read_byte(ctx, get_bc(ctx));
 			ctx->cycles += 7;
 			break;
 		case 0x0b: /* DCX B */
@@ -541,7 +559,7 @@ i8080_exec_opcode(struct i8080 *ctx, uint8_t opcode)
 			ctx->cycles += 10;
 			break;
 		case 0x12: /* STAX D */
-			write_word(ctx, get_de(ctx), ctx->a);
+			write_byte(ctx, get_de(ctx), ctx->a);
 			ctx->cycles += 7;
 			break;
 		case 0x13: /* INX D */
@@ -573,7 +591,7 @@ i8080_exec_opcode(struct i8080 *ctx, uint8_t opcode)
 			ctx->cycles += 10;
 			break;
 		case 0x1a: /* LDAX D */
-			ctx->a = read_word(ctx, get_de(ctx));
+			ctx->a = read_byte(ctx, get_de(ctx));
 			ctx->cycles += 7;
 			break;
 		case 0x1b: /* DCX D */
@@ -669,7 +687,7 @@ i8080_exec_opcode(struct i8080 *ctx, uint8_t opcode)
 			ctx->cycles += 10;
 			break;
 		case 0x32: /* STA */
-			write_word(ctx, fetch_word(ctx), ctx->a);
+			write_byte(ctx, fetch_word(ctx), ctx->a);
 			ctx->cycles += 13;
 			break;
 		case 0x33: /* INX SP */
@@ -702,7 +720,7 @@ i8080_exec_opcode(struct i8080 *ctx, uint8_t opcode)
 			ctx->cycles += 10;
 			break;
 		case 0x3a: /* LDA */
-			ctx->a = read_word(ctx, fetch_word(ctx));
+			ctx->a = read_byte(ctx, fetch_word(ctx));
 			ctx->cycles += 13;
 			break;
 		case 0x3b: /* DCX SP */
@@ -1303,6 +1321,10 @@ i8080_exec_opcode(struct i8080 *ctx, uint8_t opcode)
 				ctx->pc += 2;
 			ctx->cycles += 10;
 			break;
+		case 0xcb: /* JMP (Undocumented) */
+			op_jmp(ctx);
+			ctx->cycles += 10;
+			break;
 		case 0xcc: /* CZ */
 			if (get_flag(ctx, FLAG_Z) != 0) {
 				op_call(ctx);
@@ -1387,6 +1409,10 @@ i8080_exec_opcode(struct i8080 *ctx, uint8_t opcode)
 				ctx->pc += 2;
 			ctx->cycles += 10;
 			break;
+		case 0xdb: /* IN */
+			ctx->a = ctx->io_inb(ctx, fetch_byte(ctx));
+			ctx->cycles += 10;
+			break;
 		case 0xdc: /* CC */
 			if (get_flag(ctx, FLAG_C) != 0) {
 				op_call(ctx);
@@ -1395,6 +1421,10 @@ i8080_exec_opcode(struct i8080 *ctx, uint8_t opcode)
 				ctx->pc += 2;
 				ctx->cycles += 11;
 			}
+			break;
+		case 0xdd: /* CALL (Undocumented) */
+			op_call(ctx);
+			ctx->cycles += 17;
 			break;
 		case 0xde: /* SBI */
 			op_sbb(ctx, fetch_byte(ctx));
@@ -1480,6 +1510,10 @@ i8080_exec_opcode(struct i8080 *ctx, uint8_t opcode)
 				ctx->cycles += 11;
 			}
 			break;
+		case 0xed: /* CALL (Undocumented) */
+			op_call(ctx);
+			ctx->cycles += 17;
+			break;
 		case 0xee: /* XRI */
 			op_xra(ctx, fetch_byte(ctx));
 			ctx->cycles += 7;
@@ -1498,6 +1532,7 @@ i8080_exec_opcode(struct i8080 *ctx, uint8_t opcode)
 			break;
 		case 0xf1: /* POP PSW */
 			set_psw(ctx, pop_word(ctx));
+			/* Make sure the unused bits are set. */
 			ctx->f |= 0x02;
 			ctx->f &= ~0x08;
 			ctx->f &= ~0x20;
@@ -1524,6 +1559,7 @@ i8080_exec_opcode(struct i8080 *ctx, uint8_t opcode)
 			}
 			break;
 		case 0xf5: /* PUSH PSW */
+			/* Make sure the unused bits are set. */
 			ctx->f |= 0x02;
 			ctx->f &= ~0x08;
 			ctx->f &= ~0x20;
@@ -1570,6 +1606,10 @@ i8080_exec_opcode(struct i8080 *ctx, uint8_t opcode)
 				ctx->cycles += 11;
 			}
 			break;
+		case 0xfd: /* CALL (Undocumented) */
+			op_call(ctx);
+			ctx->cycles += 17;
+			break;
 		case 0xfe: /* CPI */
 			op_cmp(ctx, fetch_byte(ctx));
 			ctx->cycles += 7;
@@ -1579,10 +1619,8 @@ i8080_exec_opcode(struct i8080 *ctx, uint8_t opcode)
 			ctx->cycles += 11;
 			break;
 		default:
-			fprintf(stderr, "0x%02x: Unimplemented opcode.\n",
-					opcode);
-			i8080_print_state(ctx);
-			exit(1);
+			/* Unreachable */
+			break;
 	}
 }
 
