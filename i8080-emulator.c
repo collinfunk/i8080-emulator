@@ -22,8 +22,8 @@ static void emulator_destroy(struct emulator *);
 static int emulator_load_file(struct emulator *, const char *, uint16_t);
 static uint8_t emulator_read_byte(void *, uint16_t);
 static void emulator_write_byte(void *, uint16_t, uint8_t);
-static uint8_t emulator_io_outb(void *, uint8_t);
-static void emulator_io_inb(void *, uint8_t, uint8_t);
+static uint8_t emulator_io_inb(void *, uint8_t);
+static void emulator_io_outb(void *, uint8_t, uint8_t);
 
 int
 main(int argc, char **argv)
@@ -89,8 +89,8 @@ emulator_create(void)
 	cpu->opaque = emu;
 	cpu->read_byte = emulator_read_byte;
 	cpu->write_byte = emulator_write_byte;
-	cpu->io_inb = emulator_io_outb;
-	cpu->io_outb = emulator_io_inb;
+	cpu->io_inb = emulator_io_inb;
+	cpu->io_outb = emulator_io_outb;
 	emu->memory = NULL;
 	emu->memory_size = 0;
 	return emu;
@@ -187,7 +187,7 @@ emulator_write_byte(void *emuptr, uint16_t address, uint8_t val)
 }
 
 static uint8_t
-emulator_io_outb(void *emuptr, uint8_t port)
+emulator_io_inb(void *emuptr, uint8_t port)
 {
 	return 0;
 }
@@ -201,7 +201,7 @@ emulator_io_outb(void *emuptr, uint8_t port)
  * DE. Characters a read and printed until a terminating $ character.
  */
 static void
-emulator_io_inb(void *emuptr, uint8_t port, uint8_t val)
+emulator_io_outb(void *emuptr, uint8_t port, uint8_t val)
 {
 	struct emulator *emu = emuptr;
 	struct i8080 *cpu = &emu->cpu;
