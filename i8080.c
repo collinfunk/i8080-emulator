@@ -469,6 +469,8 @@ i8080_init(struct i8080 *ctx)
 	ctx->pc = 0;
 	ctx->halted = 0;
 	ctx->int_enable = 0;
+	ctx->int_requested = 0;
+	ctx->int_opcode = 0;
 	ctx->cycles = 0;
 	ctx->opaque = NULL;
 	ctx->read_byte = NULL;
@@ -480,7 +482,30 @@ i8080_init(struct i8080 *ctx)
 void
 i8080_step(struct i8080 *ctx)
 {
+	/* If we an interrupt is requested */
+	if (ctx->int_requested != 0 && ctx->int_enable != 0) {
+		/* Acknowledge request and reset INTE. */
+		ctx->int_enable = 0;
+		ctx->int_requested = 0;
+		/* Interrupt occured so unhalt */
+		ctx->halted = 0;
+
+		/* Execute the requested opcode */
+		i8080_exec_opcode(ctx, ctx->int_opcode);
+		return;
+	}
+
+	/* Wait for an interrupt. */
+	if (ctx->halted != 0)
+		return;
 	i8080_exec_opcode(ctx, fetch_byte(ctx));
+}
+
+void
+i8080_interrupt(struct i8080 *ctx, uint8_t opcode)
+{
+	ctx->int_requested = 1;
+	ctx->int_opcode = opcode;
 }
 
 void
