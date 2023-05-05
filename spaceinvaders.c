@@ -8,6 +8,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <SDL2/SDL.h>
+
 #include "i8080.h"
 
 /*
@@ -25,6 +27,13 @@ struct spaceinvaders {
 	struct i8080 cpu;
 	uint8_t *memory;
 	size_t memory_size;
+	SDL_Window *window;
+	SDL_Renderer *renderer;
+	SDL_Texture *texture;
+	SDL_Event event;
+	uint8_t sdl_started; /* SDL_Quit() */
+	uint8_t exit_flag;
+	uint8_t *video_buffer;
 	uint8_t inp0; /* Unused? */
 	uint8_t inp1;
 	uint8_t inp2;
@@ -37,10 +46,12 @@ static void usage(void);
 static struct spaceinvaders *spaceinvaders_create(void);
 static void spaceinvaders_destroy(struct spaceinvaders *);
 static int spaceinvaders_load_file(struct spaceinvaders *, const char *);
+static int sdl_init(struct spaceinvaders *);
 static uint8_t spaceinvaders_read_byte(void *, uint16_t);
 static void spaceinvaders_write_byte(void *, uint16_t, uint8_t);
 static uint8_t spaceinvaders_io_inb(void *, uint8_t);
 static void spaceinvaders_io_outb(void *, uint8_t, uint8_t);
+static void spaceinvaders_loop(struct spaceinvaders *);
 
 int
 main(int argc, char **argv)
@@ -56,6 +67,12 @@ main(int argc, char **argv)
 	cpu = &emu->cpu;
 	if (spaceinvaders_load_file(emu, argv[1]) < 0)
 		goto fail;
+
+	if (sdl_init(emu) < 0)
+		goto fail;
+
+	for (emu->exit_flag = 0; emu->exit_flag == 0;)
+		spaceinvaders_loop(emu);
 
 	spaceinvaders_destroy(emu);
 	return 0;
@@ -91,6 +108,12 @@ spaceinvaders_create(void)
 	cpu->io_outb = spaceinvaders_io_outb;
 	emu->memory = NULL;
 	emu->memory_size = 0;
+	emu->video_buffer = NULL;
+	emu->window = NULL;
+	emu->renderer = NULL;
+	emu->texture = NULL;
+	emu->sdl_started = 0;
+	emu->exit_flag = 0;
 	emu->inp0 = 0;
 	emu->inp1 = 0;
 	emu->inp2 = 0;
@@ -106,9 +129,56 @@ spaceinvaders_destroy(struct spaceinvaders *emu)
 	if (emu == NULL)
 		return;
 	free(emu->memory);
-	emu->memory = NULL;
+	if (emu->video_buffer != NULL)
+		free(emu->video_buffer);
+	if (emu->texture != NULL)
+		SDL_DestroyTexture(emu->texture);
+	if (emu->renderer != NULL)
+		SDL_DestroyRenderer(emu->renderer);
+	if (emu->window != NULL)
+		SDL_DestroyWindow(emu->window);
+	if (emu->sdl_started != 0)
+		SDL_Quit();
 	free(emu);
 }
+
+static int
+sdl_init(struct spaceinvaders *emu)
+{
+	if (SDL_Init(SDL_INIT_VIDEO) != 0)
+		return -1;
+	emu->sdl_started = 1;
+
+	/* User defined ratios for screen? */
+	emu->window = SDL_CreateWindow("Space Invaders Emulator",
+			SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+			SI_SCREEN_WIDTH * 4, SI_SCREEN_HEIGHT * 4,
+			SDL_WINDOW_RESIZABLE);
+
+	if (emu->window == NULL)
+		return -1;
+
+	emu->renderer = SDL_CreateRenderer(emu->window, -1,
+			SDL_RENDERER_ACCELERATED);
+	if (emu->renderer == NULL)
+		return -1;
+
+	emu->texture = SDL_CreateTexture(emu->renderer, SDL_PIXELFORMAT_RGBA32,
+			SDL_TEXTUREACCESS_STREAMING, SI_SCREEN_WIDTH,
+			SI_SCREEN_HEIGHT);
+
+	if (emu->texture == NULL)
+		return -1;
+
+	emu->video_buffer = calloc(256, 244 * 4);
+	if (emu->video_buffer == NULL)
+		return -1;
+
+	SDL_UpdateTexture(emu->texture, NULL, emu->video_buffer,
+			4 * SI_SCREEN_WIDTH);
+	return 0;
+}
+
 
 static int
 spaceinvaders_load_file(struct spaceinvaders *emu, const char *file)
@@ -242,4 +312,16 @@ spaceinvaders_io_outb(void *emuptr, uint8_t port, uint8_t val)
 			break;
 	}
 }
+
+static void
+spaceinvaders_loop(struct spaceinvaders *emu)
+{
+	while (SDL_PollEvent(&emu->event) != 0) {
+		if (emu->event.type == SDL_QUIT) {
+			emu->exit_flag = 1;
+			return;
+		}
+	}
+}
+
 
