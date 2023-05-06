@@ -20,8 +20,8 @@
  * 4000 - ram mirror
  */
 #define SI_MEMORY_SIZE 0x4000
-#define SI_SCREEN_WIDTH 256
-#define SI_SCREEN_HEIGHT 224
+#define SI_SCREEN_WIDTH 224
+#define SI_SCREEN_HEIGHT 256
 
 struct spaceinvaders {
 	struct i8080 cpu;
@@ -40,6 +40,11 @@ struct spaceinvaders {
 	uint8_t shift0;
 	uint8_t shift1;
 	uint8_t shift_offset;
+	void *tpixels; /* SDL_LockTexture() */
+	int tpitch; /* SDL_LockTexture() */
+	uint64_t curr_time;
+	uint64_t prev_time;
+	uint64_t delta_time;
 };
 
 static void usage(void);
@@ -51,6 +56,10 @@ static uint8_t spaceinvaders_read_byte(void *, uint16_t);
 static void spaceinvaders_write_byte(void *, uint16_t, uint8_t);
 static uint8_t spaceinvaders_io_inb(void *, uint8_t);
 static void spaceinvaders_io_outb(void *, uint8_t, uint8_t);
+static void spaceinvaders_update_texture(struct spaceinvaders *);
+static void spaceinvaders_update_screen(struct spaceinvaders *);
+static void spaceinvaders_handle_keydown(struct spaceinvaders *, SDL_Scancode);
+static void spaceinvaders_handle_keyup(struct spaceinvaders *, SDL_Scancode);
 static void spaceinvaders_loop(struct spaceinvaders *);
 
 int
@@ -100,7 +109,6 @@ spaceinvaders_create(void)
 		return NULL;
 	cpu = &emu->cpu;
 	i8080_init(cpu);
-	i8080_init(cpu);
 	cpu->opaque = emu;
 	cpu->read_byte = spaceinvaders_read_byte;
 	cpu->write_byte = spaceinvaders_write_byte;
@@ -120,6 +128,11 @@ spaceinvaders_create(void)
 	emu->shift0 = 0;
 	emu->shift1 = 0;
 	emu->shift_offset = 0;
+	emu->tpixels = NULL;
+	emu->tpitch = 0;
+	emu->curr_time = 0;
+	emu->prev_time = 0;
+	emu->delta_time = 0;
 	return emu;
 }
 
@@ -314,14 +327,114 @@ spaceinvaders_io_outb(void *emuptr, uint8_t port, uint8_t val)
 }
 
 static void
+spaceinvaders_update_texture(struct spaceinvaders *emu)
+{
+	emu->tpixels = NULL;
+	emu->tpitch = 0;
+	if (SDL_LockTexture(emu->texture, NULL, &emu->tpixels,
+				&emu->tpitch) < 0) {
+		fprintf(stderr, "SDL_LockTexture(): %s.\n", SDL_GetError());
+		return;
+	}
+
+	memcpy(emu->tpixels, emu->video_buffer,
+			emu->tpitch * SI_SCREEN_HEIGHT);
+	SDL_UnlockTexture(emu->texture);
+}
+
+static void
+spaceinvaders_update_screen(struct spaceinvaders *emu)
+{
+	SDL_RenderClear(emu->renderer);
+	SDL_RenderCopy(emu->renderer, emu->texture, NULL, NULL);
+	SDL_RenderPresent(emu->renderer);
+}
+
+/*
+ * Inputs:
+ *	Port 1:
+ *		Bit 0 (0x01): Credit
+ *		Bit 1 (0x02): 2 player start
+ *		Bit 2 (0x04): 1 player start
+ *		Bit 3 (0x08): Always 1
+ *		Bit 4 (0x10): Player 1 fired missle
+ *		Bit 5 (0x20): Player 1 moved left
+ *		Bit 6 (0x40): Player 1 moved right
+ *		Bit 7 (0x80): Not connected
+ */
+static void
+spaceinvaders_handle_keydown(struct spaceinvaders *emu, SDL_Scancode key)
+{
+	switch (key) {
+		case SDL_SCANCODE_3: /* Insert coin */
+			emu->inp1 |= 0x01;
+			break;
+		case SDL_SCANCODE_2: /* Two players */
+			emu->inp1 |= 0x02;
+			break;
+		case SDL_SCANCODE_1: /* One player */
+			emu->inp1 |= 0x04;
+			break;
+		case SDL_SCANCODE_SPACE: /* Fire missle */
+			emu->inp1 |= 0x10;
+			break;
+		case SDL_SCANCODE_A: /* Move left */
+			emu->inp1 |= 0x20;
+			break;
+		case SDL_SCANCODE_D: /* Move right */
+			emu->inp1 |= 0x40;
+			break;
+		case SDL_SCANCODE_ESCAPE:
+			emu->exit_flag = 1;
+			break;
+	}
+}
+
+static void
+spaceinvaders_handle_keyup(struct spaceinvaders *emu, SDL_Scancode key)
+{
+	switch (key) {
+		case SDL_SCANCODE_3: /* Insert coin */
+			emu->inp1 &= ~0x01;
+			break;
+		case SDL_SCANCODE_2: /* Two players */
+			emu->inp1 &= ~0x02;
+			break;
+		case SDL_SCANCODE_1: /* One player */
+			emu->inp1 &= ~0x04;
+			break;
+		case SDL_SCANCODE_SPACE: /* Fire missle */
+			emu->inp1 &= ~0x10;
+			break;
+		case SDL_SCANCODE_A: /* Move left */
+			emu->inp1 &= ~0x20;
+			break;
+		case SDL_SCANCODE_D: /* Move right */
+			emu->inp1 &= ~0x40;
+			break;
+	}
+}
+
+static void
 spaceinvaders_loop(struct spaceinvaders *emu)
 {
+	/* Milliseconds since SDL_Init() */
+	emu->curr_time = SDL_GetTicks64();
+	emu->delta_time = emu->curr_time - emu->prev_time;
+
 	while (SDL_PollEvent(&emu->event) != 0) {
-		if (emu->event.type == SDL_QUIT) {
+		if (emu->event.type == SDL_QUIT)
 			emu->exit_flag = 1;
-			return;
-		}
+		else if (emu->event.type == SDL_KEYDOWN)
+			spaceinvaders_handle_keydown(emu,
+					emu->event.key.keysym.scancode);
+		else if (emu->event.type == SDL_KEYUP)
+			spaceinvaders_handle_keyup(emu,
+					emu->event.key.keysym.scancode);
 	}
+
+	spaceinvaders_update_screen(emu);
+	emu->prev_time = emu->curr_time;
 }
 
 
