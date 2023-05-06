@@ -80,9 +80,9 @@ struct spaceinvaders {
 	uint8_t next_int; /* RST 1 (0xcf) or RST 2 (0xd7) */
 	void *tpixels; /* SDL_LockTexture() */
 	int tpitch; /* SDL_LockTexture() */
-	uint64_t curr_time;
-	uint64_t prev_time;
-	uint64_t delta_time;
+	uint32_t curr_time;
+	uint32_t prev_time;
+	uint32_t delta_time;
 };
 
 static void usage(void);
@@ -549,7 +549,7 @@ spaceinvaders_loop(struct spaceinvaders *emu)
 	SDL_Scancode kp;
 
 	/* Milliseconds since SDL_Init() */
-	emu->curr_time = SDL_GetTicks64();
+	emu->curr_time = SDL_GetTicks();
 	emu->delta_time = emu->curr_time - emu->prev_time;
 	while (SDL_PollEvent(&emu->event) != 0) {
 		if (emu->event.type == SDL_QUIT)
