@@ -20,6 +20,43 @@
  * 4000 - ram mirror
  */
 #define SI_MEMORY_SIZE 0x4000
+#define SI_VRAM_OFFSET 0x2400
+
+/*
+ * Space Invaders was originally made for the Taito 8080 in Japan and
+ * then was liscened to Midway for US/EU markets. It's kind of hard to
+ * find information on the Taito 8080 and Midway 8080 and I am NOT smart
+ * enough to read the ciruit diagrams and stuff. From what I can find the
+ * i8080 used had a clock speed of 2MHz or slightly under 2 MHz.
+ *
+ * The screen was 256x224 but rotated 90 degrees counter-clockwise in the
+ * Space Invaders cabinet. It had a refresh rate of 60 Hz. Each pixel is
+ * on/off so 1 byte encodes for 8 pixels ((256 * 244) / 8 = 7168 bytes).
+ * Original machines used physical covers on portions on the screen for color
+ * but later supported colored images.
+ *
+ * The game uses RST 1 (call $0x08) and RST 2 (call $0x10) for interrupts.
+ * Interrupts happen around twice per second since their timings are based
+ * on the vertical blanking interval of the CRT monitor. Interrupt 1 (RST 1)
+ * is used when the beam is around the middle of the screen. The second
+ * interrupt (RST 2) is used when the beam is at the last line of the screen.
+ */
+
+/* 2 MHz */
+#define SI_CLOCK_SPEED 2000000
+/* 60 Hz screen */
+#define SI_REFRESH_RATE 60
+/* Clock speed / Refresh rate */
+#define SI_CYCLES_PER_FRAME 33333
+/* Interrupts twice per frame, see above */
+#define SI_CYCLES_PER_INT 16666
+/* 8 pixels per bit, see above */
+#define SI_SCREEN_BITS 7168
+
+/*
+ * SI_SCREEN_WIDTH and SI_SCREEN_HEIGHT are name based on the rotated
+ * screen for clarity with SDL functions.
+ */
 #define SI_SCREEN_WIDTH 224
 #define SI_SCREEN_HEIGHT 256
 
@@ -33,13 +70,14 @@ struct spaceinvaders {
 	SDL_Event event;
 	uint8_t sdl_started; /* SDL_Quit() */
 	uint8_t exit_flag;
-	uint8_t *video_buffer;
+	uint32_t *video_buffer;
 	uint8_t inp0; /* Unused? */
 	uint8_t inp1;
 	uint8_t inp2;
 	uint8_t shift0;
 	uint8_t shift1;
 	uint8_t shift_offset;
+	uint8_t next_int; /* RST 1 (0xcf) or RST 2 (0xd7) */
 	void *tpixels; /* SDL_LockTexture() */
 	int tpitch; /* SDL_LockTexture() */
 	uint64_t curr_time;
@@ -60,29 +98,27 @@ static void spaceinvaders_update_texture(struct spaceinvaders *);
 static void spaceinvaders_update_screen(struct spaceinvaders *);
 static void spaceinvaders_handle_keydown(struct spaceinvaders *, SDL_Scancode);
 static void spaceinvaders_handle_keyup(struct spaceinvaders *, SDL_Scancode);
+static void spaceinvaders_handle_cpu(struct spaceinvaders *);
+static inline void spaceinvaders_handle_vram_bit(struct spaceinvaders *,
+		uint8_t, uint32_t, uint32_t);
+static void spaceinvaders_handle_vram(struct spaceinvaders *);
 static void spaceinvaders_loop(struct spaceinvaders *);
 
 int
 main(int argc, char **argv)
 {
 	struct spaceinvaders *emu;
-	struct i8080 *cpu;
 	if (argc != 2)
 		usage();
 	emu = spaceinvaders_create();
 	if (emu == NULL)
 		goto fail;
-
-	cpu = &emu->cpu;
 	if (spaceinvaders_load_file(emu, argv[1]) < 0)
 		goto fail;
-
 	if (sdl_init(emu) < 0)
 		goto fail;
-
 	for (emu->exit_flag = 0; emu->exit_flag == 0;)
 		spaceinvaders_loop(emu);
-
 	spaceinvaders_destroy(emu);
 	return 0;
 fail:
@@ -128,6 +164,8 @@ spaceinvaders_create(void)
 	emu->shift0 = 0;
 	emu->shift1 = 0;
 	emu->shift_offset = 0;
+	/* Starts with RST 1 and then alernates between RST 1 and RST 2 */
+	emu->next_int = 0xcf;
 	emu->tpixels = NULL;
 	emu->tpitch = 0;
 	emu->curr_time = 0;
@@ -141,7 +179,6 @@ spaceinvaders_destroy(struct spaceinvaders *emu)
 {
 	if (emu == NULL)
 		return;
-	free(emu->memory);
 	if (emu->video_buffer != NULL)
 		free(emu->video_buffer);
 	if (emu->texture != NULL)
@@ -158,34 +195,45 @@ spaceinvaders_destroy(struct spaceinvaders *emu)
 static int
 sdl_init(struct spaceinvaders *emu)
 {
-	if (SDL_Init(SDL_INIT_VIDEO) != 0)
+	if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+		fprintf(stderr, "SDL_Init(): %s.\n", SDL_GetError());
 		return -1;
-	emu->sdl_started = 1;
+	}
 
+	/* Flag for cleaning up with SDL_Quit(). */
+	emu->sdl_started = 1;
 	/* User defined ratios for screen? */
 	emu->window = SDL_CreateWindow("Space Invaders Emulator",
 			SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
 			SI_SCREEN_WIDTH * 4, SI_SCREEN_HEIGHT * 4,
 			SDL_WINDOW_RESIZABLE);
 
-	if (emu->window == NULL)
+	if (emu->window == NULL) {
+		fprintf(stderr, "SDL_CreateWindow(): %s.\n", SDL_GetError());
 		return -1;
+	}
 
 	emu->renderer = SDL_CreateRenderer(emu->window, -1,
 			SDL_RENDERER_ACCELERATED);
-	if (emu->renderer == NULL)
+	if (emu->renderer == NULL) {
+		fprintf(stderr, "SDL_CreateRenderer(): %s.\n", SDL_GetError());
 		return -1;
+	}
 
-	emu->texture = SDL_CreateTexture(emu->renderer, SDL_PIXELFORMAT_RGBA32,
+	emu->texture = SDL_CreateTexture(emu->renderer, SDL_PIXELFORMAT_ABGR8888,
 			SDL_TEXTUREACCESS_STREAMING, SI_SCREEN_WIDTH,
 			SI_SCREEN_HEIGHT);
 
-	if (emu->texture == NULL)
+	if (emu->texture == NULL) {
+		fprintf(stderr, "SDL_CreateTexture(): %s.\n", SDL_GetError());
 		return -1;
+	}
 
-	emu->video_buffer = calloc(256, 244 * 4);
-	if (emu->video_buffer == NULL)
+	emu->video_buffer = calloc(1, 224 * 256 * 4);
+	if (emu->video_buffer == NULL) {
+		fprintf(stderr, "Failed to allocate video memory.\n");
 		return -1;
+	}
 
 	SDL_UpdateTexture(emu->texture, NULL, emu->video_buffer,
 			4 * SI_SCREEN_WIDTH);
@@ -222,7 +270,7 @@ spaceinvaders_load_file(struct spaceinvaders *emu, const char *file)
 		goto err0;
 	}
 
-	mem = calloc(1, 0x4000);
+	mem = calloc(1, 0x10000);
 	if (mem == NULL) {
 		fprintf(stderr, "Memory allocation failed.\n");
 		goto err1;
@@ -280,7 +328,7 @@ spaceinvaders_io_inb(void *emuptr, uint8_t port)
 	uint8_t val;
 	uint16_t s;
 
-	switch (val) {
+	switch (port) {
 		case 0x00: /* Unused ? */
 			val = emu->inp0;
 			break;
@@ -307,11 +355,10 @@ static void
 spaceinvaders_io_outb(void *emuptr, uint8_t port, uint8_t val)
 {
 	struct spaceinvaders *emu = emuptr;
-	printf("out\n");
 
 	switch (port) {
 		case 0x02: /* Shift amount (3 bits) */
-			emu->shift_offset & 0x07;
+			emu->shift_offset = val & 0x07;
 			break;
 		case 0x03: /* Sound bits */
 			break;
@@ -322,6 +369,7 @@ spaceinvaders_io_outb(void *emuptr, uint8_t port, uint8_t val)
 		case 0x05: /* Sound bits */
 			break;
 		case 0x06: /* Watch dog */
+			/* Pretty sure this checks if the machine crashes? */
 			break;
 	}
 }
@@ -336,7 +384,6 @@ spaceinvaders_update_texture(struct spaceinvaders *emu)
 		fprintf(stderr, "SDL_LockTexture(): %s.\n", SDL_GetError());
 		return;
 	}
-
 	memcpy(emu->tpixels, emu->video_buffer,
 			emu->tpitch * SI_SCREEN_HEIGHT);
 	SDL_UnlockTexture(emu->texture);
@@ -387,6 +434,8 @@ spaceinvaders_handle_keydown(struct spaceinvaders *emu, SDL_Scancode key)
 		case SDL_SCANCODE_ESCAPE:
 			emu->exit_flag = 1;
 			break;
+		default:
+			break;
 	}
 }
 
@@ -412,29 +461,109 @@ spaceinvaders_handle_keyup(struct spaceinvaders *emu, SDL_Scancode key)
 		case SDL_SCANCODE_D: /* Move right */
 			emu->inp1 &= ~0x40;
 			break;
+		default:
+			break;
 	}
+}
+
+/*
+ * Each frame has 120 interrupts total, 60 of each RST 1 and RST 2.
+ * The interrupts are based on the raster scanning of the CRT monitor.
+ * RST 1 is used when the beam is towards the middle of the monitor and
+ * RST 2 is used when the beam is about to do a verticle retrace to
+ * draw the next frame. Therefore we alternate between each interrupt
+ * performing 120 (refresh rate * 2) interrupts total. When RST 2 is called
+ * we also update the actual screen based on the contents of vram.
+ */
+static void
+spaceinvaders_handle_cpu(struct spaceinvaders *emu)
+{
+	struct i8080 *cpu = &emu->cpu;
+	const uint64_t need = (emu->delta_time * SI_CLOCK_SPEED) / 1000;
+	uint64_t i, prev, diff;
+
+	for (i = diff = 0; i < need; i += diff) {
+		prev = emu->cpu.cycles;
+		i8080_step(cpu);
+		diff = cpu->cycles - prev;
+		if (cpu->cycles >= SI_CYCLES_PER_INT) {
+			cpu->cycles -= SI_CYCLES_PER_INT;
+			i8080_interrupt(cpu, emu->next_int);
+			if (emu->next_int == 0xcf)
+				emu->next_int = 0xd7;
+			else {
+				spaceinvaders_handle_vram(emu);
+				emu->next_int = 0xcf;
+			}
+		}
+	}
+}
+
+/*
+ * Space invaders machines have a screen thats rotated 90 degrees counter
+ * clockwise. A good diagram is at the bottom of this page:
+ * https://computerarcheology.com/Arcade/SpaceInvaders/Hardware.html
+ * Currently only black and white. Original machines just used a physical
+ * overlay ontop of the screen for color so it shouldn't be too hard
+ * to find those and figure out which values for x and y are which
+ * color.
+ */
+static inline void
+spaceinvaders_handle_vram_bit(struct spaceinvaders *emu, uint8_t cb,
+		uint32_t xoff, uint32_t y)
+{
+	uint32_t i, cx, cy, tx, off;
+	uint8_t set;
+
+	for (i = 0; i < 8; ++i, cb = (cb >> 1)) {
+		cx = xoff + i;
+		cy = y;
+		set = (cb & 0x01) != 0 ? 1 : 0;
+		/* Rotate */
+		tx = cx;
+		cx = cy;
+		cy = SI_SCREEN_HEIGHT - tx - 1;
+		off = (cy * SI_SCREEN_WIDTH) + cx;
+		/* ARGB color */
+		emu->video_buffer[off] = (set == 0) ? 0xff000000 : 0x00ffffff;
+	}
+}
+
+static void
+spaceinvaders_handle_vram(struct spaceinvaders *emu)
+{
+	uint32_t i, y, xoff;
+
+	for (i = 0; i < SI_SCREEN_BITS; ++i) {
+		y= (i * 8) / 256;
+		xoff = (i * 8) & 255;
+		spaceinvaders_handle_vram_bit(emu,
+				emu->memory[SI_VRAM_OFFSET + i], xoff, y);
+	}
+	spaceinvaders_update_texture(emu);
 }
 
 static void
 spaceinvaders_loop(struct spaceinvaders *emu)
 {
+	SDL_Scancode kp;
+
 	/* Milliseconds since SDL_Init() */
 	emu->curr_time = SDL_GetTicks64();
 	emu->delta_time = emu->curr_time - emu->prev_time;
-
 	while (SDL_PollEvent(&emu->event) != 0) {
 		if (emu->event.type == SDL_QUIT)
 			emu->exit_flag = 1;
-		else if (emu->event.type == SDL_KEYDOWN)
-			spaceinvaders_handle_keydown(emu,
-					emu->event.key.keysym.scancode);
-		else if (emu->event.type == SDL_KEYUP)
-			spaceinvaders_handle_keyup(emu,
-					emu->event.key.keysym.scancode);
+		else if (emu->event.type == SDL_KEYDOWN) {
+			kp = emu->event.key.keysym.scancode;
+			spaceinvaders_handle_keydown(emu, kp);
+		} else if (emu->event.type == SDL_KEYUP) {
+			kp = emu->event.key.keysym.scancode;
+			spaceinvaders_handle_keyup(emu, kp);
+		}
 	}
-
+	spaceinvaders_handle_cpu(emu);
 	spaceinvaders_update_screen(emu);
 	emu->prev_time = emu->curr_time;
 }
-
 
