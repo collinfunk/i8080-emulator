@@ -60,6 +60,16 @@
 #define SI_SCREEN_WIDTH 224
 #define SI_SCREEN_HEIGHT 256
 
+/*
+ * ABGR colors
+ * These colors are just a guess from images online. I have
+ * no clue what color codes they actually use.
+ */
+#define SI_ABGR_GREEN 0xff33ff00
+#define SI_ABGR_RED   0xff0000ff
+#define SI_ABGR_WHITE 0xffffffff
+#define SI_ABGR_BLACK 0xff000000
+
 struct spaceinvaders {
 	struct i8080 cpu;
 	uint8_t *memory;
@@ -99,6 +109,8 @@ static void spaceinvaders_update_screen(struct spaceinvaders *);
 static void spaceinvaders_handle_keydown(struct spaceinvaders *, SDL_Scancode);
 static void spaceinvaders_handle_keyup(struct spaceinvaders *, SDL_Scancode);
 static void spaceinvaders_handle_cpu(struct spaceinvaders *);
+static inline void spaceinvaders_set_pixel(struct spaceinvaders *, uint32_t,
+		uint32_t, uint32_t);
 static inline void spaceinvaders_handle_vram_bit(struct spaceinvaders *,
 		uint8_t, uint32_t, uint32_t);
 static void spaceinvaders_handle_vram(struct spaceinvaders *);
@@ -500,13 +512,53 @@ spaceinvaders_handle_cpu(struct spaceinvaders *emu)
 }
 
 /*
+ * Estimation of the colors based on the overlay images I could find online.
+ * Probably a little off but it is what it is. This can def be cleaned up.
+ * If you comment out:
+ *	if (set == 0)
+ *			emu->video_buffer[off] = SI_ABGR_BLACK;
+ *		else
+ * in spaceinvaders_handle_vram_bit() you can see the overlay which might help
+ * if actual dimensions are out there somewhere.
+ */
+static inline void
+spaceinvaders_set_pixel(struct spaceinvaders *emu, uint32_t off, uint32_t cx,
+		uint32_t cy)
+{
+	/* Lives / Credit area */
+	if (cy >= 240) {
+		/* Lives Number. */
+		if (cx < 16)
+			emu->video_buffer[off] = SI_ABGR_WHITE;
+		/* Ships avaliable. */
+		else if (cx < 102)
+			emu->video_buffer[off] = SI_ABGR_GREEN;
+		/* Credits. */
+		else
+			emu->video_buffer[off] = SI_ABGR_WHITE;
+	} else if (cy >= 184) {
+		/* Barrier and player, 10 point alien on start screen. */
+		emu->video_buffer[off] = SI_ABGR_GREEN;
+	} else if (cy >= 64) {
+		/* The main portion of the screen with all the aliens. */
+		emu->video_buffer[off] = SI_ABGR_WHITE;
+	} else if (cy >= 32) {
+		/* UFO and missle explosions. */
+		emu->video_buffer[off] = SI_ABGR_RED;
+	} else {
+		/*
+		 * High score. I've seen this red in some images but I think
+	         * it is supposed to be white.
+	 	 */
+		emu->video_buffer[off] = SI_ABGR_WHITE;
+	}
+}
+
+
+/*
  * Space invaders machines have a screen thats rotated 90 degrees counter
  * clockwise. A good diagram is at the bottom of this page:
  * https://computerarcheology.com/Arcade/SpaceInvaders/Hardware.html
- * Currently only black and white. Original machines just used a physical
- * overlay ontop of the screen for color so it shouldn't be too hard
- * to find those and figure out which values for x and y are which
- * color.
  */
 static inline void
 spaceinvaders_handle_vram_bit(struct spaceinvaders *emu, uint8_t cb,
@@ -524,8 +576,11 @@ spaceinvaders_handle_vram_bit(struct spaceinvaders *emu, uint8_t cb,
 		cx = cy;
 		cy = SI_SCREEN_HEIGHT - tx - 1;
 		off = (cy * SI_SCREEN_WIDTH) + cx;
-		/* ARGB color */
-		emu->video_buffer[off] = (set == 0) ? 0xff000000 : 0x00ffffff;
+		/* Unlit pixels */
+		if (set == 0)
+			emu->video_buffer[off] = SI_ABGR_BLACK;
+		else
+			spaceinvaders_set_pixel(emu, off, cx, cy);
 	}
 }
 

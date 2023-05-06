@@ -482,7 +482,7 @@ i8080_init(struct i8080 *ctx)
 void
 i8080_step(struct i8080 *ctx)
 {
-	/* If we an interrupt is requested */
+	/* If an interrupt is requested */
 	if (ctx->int_requested != 0 && ctx->int_enable != 0) {
 		/* Acknowledge request and reset INTE. */
 		ctx->int_enable = 0;
