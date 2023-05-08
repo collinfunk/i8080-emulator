@@ -360,8 +360,8 @@ spaceinvaders_io_inb(void *emuptr, uint8_t port)
 			val = emu->inp2;
 			break;
 		case 0x03: /* Shift register */
-			s = ((uint16_t)emu->shift1 << 8) |
-				((uint16_t)emu->shift0);
+			s =  ((uint16_t)emu->shift1 << 8);
+			s |= ((uint16_t)emu->shift0);
 			val = (s >> (8 - emu->shift_offset)) & 0xff;
 			break;
 		default: /* Invalid port */
@@ -457,10 +457,14 @@ spaceinvaders_handle_keydown(struct spaceinvaders *emu, SDL_Scancode key)
 			emu->inp2 |= 0x10;
 			break;
 		case SDL_SCANCODE_A: /* Move left */
+			/* fallthrough */
+		case SDL_SCANCODE_LEFT:
 			emu->inp1 |= 0x20;
 			emu->inp2 |= 0x20;
 			break;
 		case SDL_SCANCODE_D: /* Move right */
+			/* fallthrough */
+		case SDL_SCANCODE_RIGHT:
 			emu->inp1 |= 0x40;
 			emu->inp2 |= 0x40;
 			break;
@@ -493,10 +497,14 @@ spaceinvaders_handle_keyup(struct spaceinvaders *emu, SDL_Scancode key)
 			emu->inp2 &= ~0x10;
 			break;
 		case SDL_SCANCODE_A: /* Move left */
+			/* fallthrough */
+		case SDL_SCANCODE_LEFT:
 			emu->inp1 &= ~0x20;
 			emu->inp2 &= ~0x20;
 			break;
 		case SDL_SCANCODE_D: /* Move right */
+			/* fallthrough */
+		case SDL_SCANCODE_RIGHT:
 			emu->inp1 &= ~0x40;
 			emu->inp2 &= ~0x40;
 			break;
