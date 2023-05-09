@@ -79,15 +79,16 @@ struct spaceinvaders {
 	SDL_Texture *texture;
 	SDL_Event event;
 	uint8_t sdl_started; /* SDL_Quit() */
-	uint8_t exit_flag;
+	uint8_t exit_flag; /* Signals the end of the loop. */
+	uint8_t pause_flag; /* 1 if emulation is paused. */
+	uint8_t color_flag; /* 1 for color, 0 for black and white */
 	uint32_t *video_buffer;
-	uint8_t inp0; /* Unused? */
-	uint8_t inp1;
-	uint8_t inp2;
-	uint8_t shift0;
-	uint8_t shift1;
-	uint8_t shift_offset;
-	uint8_t emulate_color; /* Since some machines where black and white */
+	uint8_t inp0; /* Input port 0, unused? */
+	uint8_t inp1; /* Input port 1 */
+	uint8_t inp2; /* Input port 2 */
+	uint8_t shift0; /* Shift register lsb */
+	uint8_t shift1; /* Shift register msb */
+	uint8_t shift_offset; /* Shift offset */
 	uint8_t next_int; /* RST 1 (0xcf) or RST 2 (0xd7) */
 	void *tpixels; /* SDL_LockTexture() */
 	int tpitch; /* SDL_LockTexture() */
@@ -171,6 +172,8 @@ spaceinvaders_create(void)
 	emu->texture = NULL;
 	emu->sdl_started = 0;
 	emu->exit_flag = 0;
+	emu->pause_flag = 0;
+	emu->color_flag = 1;
 	emu->video_buffer = NULL;
 	emu->inp0 = 0;
 	emu->inp1 = 0;
@@ -178,7 +181,6 @@ spaceinvaders_create(void)
 	emu->shift0 = 0;
 	emu->shift1 = 0;
 	emu->shift_offset = 0;
-	emu->emulate_color = 1;
 	/* Starts with RST 1 and then alernates between RST 1 and RST 2 */
 	emu->next_int = 0xcf;
 	emu->tpixels = 0;
@@ -229,7 +231,7 @@ sdl_init(struct spaceinvaders *emu)
 	}
 
 	emu->renderer = SDL_CreateRenderer(emu->window, -1,
-			SDL_RENDERER_ACCELERATED);
+			SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
 	if (emu->renderer == NULL) {
 		fprintf(stderr, "SDL_CreateRenderer(): %s.\n", SDL_GetError());
 		return -1;
@@ -471,9 +473,11 @@ spaceinvaders_handle_keydown(struct spaceinvaders *emu, SDL_Scancode key)
 		case SDL_SCANCODE_ESCAPE: /* Exit */
 			emu->exit_flag = 1;
 			break;
-		case SDL_SCANCODE_C: /* Toggle color emulation */
-			emu->emulate_color = (emu->emulate_color == 0) ? 1 : 0;
+		case SDL_SCANCODE_E: /* Toggle color emulation */
+			emu->color_flag = (emu->color_flag == 1) ? 0 : 1;
 			break;
+		case SDL_SCANCODE_Q: /* Pause toggle */
+			emu->pause_flag = (emu->pause_flag == 0) ? 1 : 0;
 		default:
 			break;
 	}
@@ -589,7 +593,6 @@ spaceinvaders_set_pixel(struct spaceinvaders *emu, uint32_t off, uint32_t cx,
 	}
 }
 
-
 /*
  * Space invaders machines have a screen thats rotated 90 degrees counter
  * clockwise. A good diagram is at the bottom of this page:
@@ -616,10 +619,10 @@ spaceinvaders_handle_vram_bit(struct spaceinvaders *emu, uint8_t cb,
 		/* Unlit pixels */
 		if (set == 0)
 			vbuff[off] = SI_ABGR_BLACK;
-		else if (emu->emulate_color == 0)
-			vbuff[off] = SI_ABGR_WHITE;
-		else
+		else if (emu->color_flag == 1)
 			spaceinvaders_set_pixel(emu, off, cx, cy);
+		else
+			vbuff[off] = SI_ABGR_WHITE;
 	}
 }
 
@@ -675,7 +678,7 @@ spaceinvaders_loop(struct spaceinvaders *emu)
 	}
 
 	/* If delta time is 0 we can chill. */
-	if (emu->delta_time >= 1) {
+	if (emu->delta_time > 0 && emu->pause_flag == 0) {
 		spaceinvaders_handle_cpu(emu);
 		spaceinvaders_update_screen(emu);
 	}
