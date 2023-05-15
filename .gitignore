@@ -19,3 +19,6 @@ tags
 /build/
 /cmake-build-*/
 
+i8080-emulator
+spaceinvaders
+

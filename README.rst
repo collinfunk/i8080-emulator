@@ -11,47 +11,70 @@ Invaders machine.
 
 Building
 ========
-Everything should build correctly on Linux, BSD, or Mac. Windows might compile
-with some edits to type and functions names. All libraries and executables
-require CMake and the Space Invaders emulator requires SDL2 for graphics and
-input handling. Installation instructions can be found here:
+Building is done through a simple Makefile which is compatible with BSD Make
+and GNU Make. Any recent version of Clang or GCC should work fine. Other
+compilers will likely work too with changes to the Makefile. All testing was
+done on AMD64 but everything should run fine on big-endian systems as well.
+The Space Invaders emulator requires SDL2 for handling graphics and keyboard
+input. More information can be found below:
 
-* `<https://cmake.org/install/>`_.
-* `<https://wiki.libsdl.org/SDL2/Installation>`_.
+* `<https://clang.llvm.org/get_started.html>`_
+* `<https://gcc.gnu.org/install/>`_
+* `<https://www.gnu.org/software/make/>`_
+* `<https://wiki.libsdl.org/SDL2/Installation>`_
 
-Once installed you can clone the repo and setup a build directory using:
+Once installed you can clone the repo and build using:
 
 .. code-block:: shell
 
 	$ git clone https://github.com/collinfunk/i8080-emulator
 	$ cd i8080-emulator
-	$ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-	$ cd build
-	$ make # Or another build tool
+	$ make all
 
 Space Invaders
 ==============
-Space Invaders requires the original files to play. I'm not sure the copyright
-status and I do not want to get banned off Github (I need a job) so they are not
-linked here. I did not use any copyrighted files to test my implementation and
-instead did logical proofs in my head to make sure everything worked. If there
-happened to be four 2 KB files online named, for example, ``invaders.e``,
-``invaders.f``, ``invaders.g``, and ``invaders.h`` the emulator would expect
-them to be combined into a 8 KB file. It would then expect the file name to be
-passed as a command-line argument. These two steps can be done with the
-following commands:
+Space Invaders requires the original files to play. I'm not sure of the
+copyright status and I do not want to get banned off GitHub (I need a job)
+so they are not linked here. If there happened to be four 2 KB files online
+named, for example, ``invaders.e``, ``invaders.f``, ``invaders.g``, and
+``invaders.h`` the emulator would expect them to be combined into an 8 KB
+file. It would then expect the file name to be passed as a command-line
+argument. These two steps can be done with the following commands:
 
 .. code-block:: shell
 
 	$ cat invaders.h invaders.g invaders.f invaders.e > invaders.rom
 	$ ./space-invaders ./path/to/invaders.rom
 
+Controls
+--------
+
+* 1: 1 Player
+* 2: 2 Player
+* 3: Insert coin
+* ESC: Quit
+* E: Toggle color
+* Q: Toggle pause
+* A: Move left
+* D: Move right
+* Space: Shoot
+
+Screenshots
+-----------
+.. image:: images/space_invaders_color.png
+        :width: 400
+        :alt: Space Invaders with color toggle on
+
+.. image:: images/space_invaders_no_color.png
+        :width: 400
+        :alt: Space Invaders with color toggle off
+
 CPU Test Outputs
 ================
 CPUTEST.COM
 -----------
 
-.. code-block:: shell
+.. code-block::
 
 	DIAGNOSTICS II V1.2 - CPU TEST
 	COPYRIGHT (C) 1981 - SUPERSOFT ASSOCIATES
@@ -68,7 +91,7 @@ CPUTEST.COM
 TST8080.COM
 -----------
 
-.. code-block:: shell
+.. code-block::
 
 	MICROCOSM ASSOCIATES 8080/8085 CPU DIAGNOSTIC
 	VERSION 1.0  (C) 1980
@@ -80,7 +103,7 @@ TST8080.COM
 8080PRE.COM
 -----------
 
-.. code-block:: shell
+.. code-block::
 
 	8080 Preliminary tests complete
 	Instruction count: 1061
@@ -89,7 +112,7 @@ TST8080.COM
 8080EXM.COM
 -----------
 
-.. code-block:: shell
+.. code-block::
 
 	8080 instruction exerciser
 	dad <b,d,h,sp>................  PASS! crc is:14474ba6
