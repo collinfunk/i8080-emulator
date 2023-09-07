@@ -94,25 +94,25 @@ get_flag (struct i8080 *ctx, uint8_t mask)
 static inline uint16_t
 get_psw (struct i8080 *ctx)
 {
-  return ((uint16_t)ctx->a << 8) | ((uint16_t)ctx->f);
+  return ((uint16_t) ctx->a << 8) | ((uint16_t) ctx->f);
 }
 
 static inline uint16_t
 get_bc (struct i8080 *ctx)
 {
-  return ((uint16_t)ctx->b << 8) | ((uint16_t)ctx->c);
+  return ((uint16_t) ctx->b << 8) | ((uint16_t) ctx->c);
 }
 
 static inline uint16_t
 get_de (struct i8080 *ctx)
 {
-  return ((uint16_t)ctx->d << 8) | ((uint16_t)ctx->e);
+  return ((uint16_t) ctx->d << 8) | ((uint16_t) ctx->e);
 }
 
 static inline uint16_t
 get_hl (struct i8080 *ctx)
 {
-  return ((uint16_t)ctx->h << 8) | ((uint16_t)ctx->l);
+  return ((uint16_t) ctx->h << 8) | ((uint16_t) ctx->l);
 }
 
 static inline void
@@ -158,8 +158,8 @@ write_byte (struct i8080 *ctx, uint16_t address, uint8_t val)
 static inline uint16_t
 read_word (struct i8080 *ctx, uint16_t address)
 {
-  return ((uint16_t)read_byte (ctx, address))
-         | ((uint16_t)read_byte (ctx, address + 1) << 8);
+  return ((uint16_t) read_byte (ctx, address))
+         | ((uint16_t) read_byte (ctx, address + 1) << 8);
 }
 
 static inline void

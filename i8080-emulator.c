@@ -84,8 +84,8 @@ main (int argc, char **argv)
     i8080_step (cpu);
 
   printf ("\n");
-  printf ("Instruction count: %ju\n", (uintmax_t)opcount);
-  printf ("Cycle count:       %ju\n", (uintmax_t)cpu->cycles);
+  printf ("Instruction count: %ju\n", (uintmax_t) opcount);
+  printf ("Cycle count:       %ju\n", (uintmax_t) cpu->cycles);
   emulator_destroy (emu);
   return 0;
 fail:
@@ -155,7 +155,7 @@ emulator_load_file (struct emulator *emu, const char *name, uint16_t offset)
   if (st.st_size <= 0 || st.st_size > UINT16_MAX)
     {
       fprintf (stderr, "%s: Invalid file size (%jd bytes).\n", name,
-               (intmax_t)st.st_size);
+               (intmax_t) st.st_size);
       goto err0;
     }
 
@@ -248,7 +248,7 @@ emulator_io_outb (void *emuptr, uint8_t port, uint8_t val)
     }
   else if (cpu->c == 9)
     {
-      de = ((uint16_t)cpu->d << 8) | ((uint16_t)cpu->e);
+      de = ((uint16_t) cpu->d << 8) | ((uint16_t) cpu->e);
       ch = emulator_read_byte (cpu->opaque, de++);
       while (ch != '$')
         {

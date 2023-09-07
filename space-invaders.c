@@ -402,8 +402,8 @@ spaceinvaders_io_inb (void *emuptr, uint8_t port)
       val = emu->inp2;
       break;
     case 0x03: /* Shift register */
-      s = ((uint16_t)emu->shift1 << 8);
-      s |= ((uint16_t)emu->shift0);
+      s = ((uint16_t) emu->shift1 << 8);
+      s |= ((uint16_t) emu->shift0);
       val = (s >> (8 - emu->shift_offset)) & 0xff;
       break;
     default: /* Invalid port */

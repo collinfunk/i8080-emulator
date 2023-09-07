@@ -100,7 +100,7 @@ IndentAccessModifiers: false
 IndentCaseLabels: false
 IndentCaseBlocks: false
 IndentGotoLabels: true
-IndentPPDirectives: None
+IndentPPDirectives: AfterHash
 IndentExternBlock: AfterExternBlock
 IndentRequires:  false
 IndentWidth:     2
@@ -132,14 +132,14 @@ PenaltyIndentedWhitespace: 0
 PointerAlignment: Right
 PPIndentWidth:   -1
 ReferenceAlignment: Pointer
-ReflowComments:  true
+ReflowComments:  false
 RemoveBracesLLVM: false
 SeparateDefinitionBlocks: Leave
 ShortNamespaceLines: 1
 SortIncludes:    CaseSensitive
 SortJavaStaticImport: Before
 SortUsingDeclarations: true
-SpaceAfterCStyleCast: false
+SpaceAfterCStyleCast: true
 SpaceAfterLogicalNot: false
 SpaceAfterTemplateKeyword: true
 SpaceBeforeAssignmentOperators: true
