@@ -179,41 +179,18 @@ static struct spaceinvaders *
 spaceinvaders_create (void)
 {
   struct spaceinvaders *emu;
-  struct i8080 *cpu;
 
-  emu = calloc (1, sizeof (*emu));
+  emu = (struct spaceinvaders *) calloc (1, sizeof (struct spaceinvaders));
   if (emu == NULL)
     return NULL;
-  cpu = &emu->cpu;
-  i8080_init (cpu);
-  cpu->opaque = emu;
-  cpu->read_byte = spaceinvaders_read_byte;
-  cpu->write_byte = spaceinvaders_write_byte;
-  cpu->io_inb = spaceinvaders_io_inb;
-  cpu->io_outb = spaceinvaders_io_outb;
-  emu->memory = NULL;
-  emu->memory_size = 0;
-  emu->window = NULL;
-  emu->renderer = NULL;
-  emu->texture = NULL;
-  emu->sdl_started = 0;
-  emu->exit_flag = 0;
-  emu->pause_flag = 0;
+  i8080_init (&emu->cpu);
+  emu->cpu.opaque = emu;
+  emu->cpu.read_byte = spaceinvaders_read_byte;
+  emu->cpu.write_byte = spaceinvaders_write_byte;
+  emu->cpu.io_inb = spaceinvaders_io_inb;
+  emu->cpu.io_outb = spaceinvaders_io_outb;
   emu->color_flag = 1;
-  emu->video_buffer = NULL;
-  emu->inp0 = 0;
-  emu->inp1 = 0;
-  emu->inp2 = 0;
-  emu->shift0 = 0;
-  emu->shift1 = 0;
-  emu->shift_offset = 0;
-  /* Starts with RST 1 and then alernates between RST 1 and RST 2 */
   emu->next_int = 0xcf;
-  emu->tpixels = 0;
-  emu->tpitch = 0;
-  emu->curr_time = 0;
-  emu->prev_time = 0;
-  emu->delta_time = 0;
   return emu;
 }
 

@@ -64,7 +64,7 @@ main (int argc, char **argv)
   if (emu == NULL)
     {
       fprintf (stderr, "Failed to allocate memory.\n");
-      goto fail;
+      exit (1);
     }
 
   cpu = &emu->cpu;
@@ -89,8 +89,7 @@ main (int argc, char **argv)
   emulator_destroy (emu);
   return 0;
 fail:
-  if (emu != NULL)
-    emulator_destroy (emu);
+  emulator_destroy (emu);
   exit (1);
 }
 
@@ -105,32 +104,24 @@ static struct emulator *
 emulator_create (void)
 {
   struct emulator *emu;
-  struct i8080 *cpu;
 
-  emu = calloc (1, sizeof (*emu));
+  emu = (struct emulator *) calloc (1, sizeof (struct emulator));
   if (emu == NULL)
     return NULL;
-  cpu = &emu->cpu;
-  i8080_init (cpu);
-  cpu->opaque = emu;
-  cpu->read_byte = emulator_read_byte;
-  cpu->write_byte = emulator_write_byte;
-  cpu->io_inb = emulator_io_inb;
-  cpu->io_outb = emulator_io_outb;
-  emu->memory = NULL;
-  emu->memory_size = 0;
+  i8080_init (&emu->cpu);
+  emu->cpu.opaque = emu;
+  emu->cpu.read_byte = emulator_read_byte;
+  emu->cpu.write_byte = emulator_write_byte;
+  emu->cpu.io_inb = emulator_io_inb;
+  emu->cpu.io_outb = emulator_io_outb;
   return emu;
 }
 
 static void
 emulator_destroy (struct emulator *emu)
 {
-  if (emu == NULL)
-    return;
   free (emu->memory);
-  emu->memory = NULL;
   free (emu);
-  emu = NULL;
 }
 
 static int
