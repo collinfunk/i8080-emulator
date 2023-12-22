@@ -199,8 +199,7 @@ spaceinvaders_destroy (struct spaceinvaders *emu)
 {
   if (emu == NULL)
     return;
-  if (emu->video_buffer != NULL)
-    free (emu->video_buffer);
+  free (emu->video_buffer);
   if (emu->texture != NULL)
     SDL_DestroyTexture (emu->texture);
   if (emu->renderer != NULL)
@@ -337,7 +336,7 @@ err0:
 static uint8_t
 spaceinvaders_read_byte (void *emuptr, uint16_t address)
 {
-  struct spaceinvaders *emu = emuptr;
+  struct spaceinvaders *emu = (struct spaceinvaders *) emuptr;
 
   if (emu->memory_size <= address || 0x6000 <= address)
     return 0;
@@ -350,7 +349,7 @@ spaceinvaders_read_byte (void *emuptr, uint16_t address)
 static void
 spaceinvaders_write_byte (void *emuptr, uint16_t address, uint8_t val)
 {
-  struct spaceinvaders *emu = emuptr;
+  struct spaceinvaders *emu = (struct spaceinvaders *) emuptr;
 
   if (emu->memory_size <= address)
     return;
@@ -363,7 +362,7 @@ spaceinvaders_write_byte (void *emuptr, uint16_t address, uint8_t val)
 static uint8_t
 spaceinvaders_io_inb (void *emuptr, uint8_t port)
 {
-  struct spaceinvaders *emu = emuptr;
+  struct spaceinvaders *emu = (struct spaceinvaders *) emuptr;
   uint8_t val;
   uint16_t s;
 
@@ -394,7 +393,7 @@ spaceinvaders_io_inb (void *emuptr, uint8_t port)
 static void
 spaceinvaders_io_outb (void *emuptr, uint8_t port, uint8_t val)
 {
-  struct spaceinvaders *emu = emuptr;
+  struct spaceinvaders *emu = (struct spaceinvaders *) emuptr;
 
   switch (port)
     {

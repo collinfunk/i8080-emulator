@@ -55,7 +55,7 @@ main (int argc, char **argv)
 {
   struct emulator *emu;
   struct i8080 *cpu;
-  uint64_t opcount;
+  uintmax_t opcount;
 
   if (argc != 2)
     usage ();
@@ -69,7 +69,10 @@ main (int argc, char **argv)
 
   cpu = &emu->cpu;
   if (emulator_load_file (emu, argv[1], 0x100) < 0)
-    goto fail;
+    {
+      emulator_destroy (emu);
+      exit (1);
+    }
 
   /* Set the start of memory to HLT's for when the test finishes. */
   memset (emu->memory, 0x76, 0x100);
@@ -88,9 +91,6 @@ main (int argc, char **argv)
   printf ("Cycle count:       %ju\n", (uintmax_t) cpu->cycles);
   emulator_destroy (emu);
   return 0;
-fail:
-  emulator_destroy (emu);
-  exit (1);
 }
 
 static void
@@ -192,7 +192,7 @@ err0:
 static uint8_t
 emulator_read_byte (void *emuptr, uint16_t address)
 {
-  struct emulator *emu = emuptr;
+  struct emulator *emu = (struct emulator *) emuptr;
 
   if (emu->memory_size <= address)
     return 0;
@@ -202,7 +202,7 @@ emulator_read_byte (void *emuptr, uint16_t address)
 static void
 emulator_write_byte (void *emuptr, uint16_t address, uint8_t val)
 {
-  struct emulator *emu = emuptr;
+  struct emulator *emu = (struct emulator *) emuptr;
 
   if (emu->memory_size <= address)
     return;
@@ -226,7 +226,7 @@ emulator_io_inb (void *emuptr, uint8_t port)
 static void
 emulator_io_outb (void *emuptr, uint8_t port, uint8_t val)
 {
-  struct emulator *emu = emuptr;
+  struct emulator *emu = (struct emulator *) emuptr;
   struct i8080 *cpu = &emu->cpu;
   uint16_t de;
   uint8_t ch;
@@ -234,9 +234,7 @@ emulator_io_outb (void *emuptr, uint8_t port, uint8_t val)
   if (port != 1)
     return;
   if (cpu->c == 2)
-    {
-      putchar (cpu->e);
-    }
+    putchar (cpu->e);
   else if (cpu->c == 9)
     {
       de = ((uint16_t) cpu->d << 8) | ((uint16_t) cpu->e);

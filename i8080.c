@@ -65,30 +65,12 @@ static const uint8_t ac_table[8] = { 0, 0, 1, 0, 1, 0, 1, 1 };
 static const uint8_t subtract_ac_table[8] = { 1, 0, 0, 0, 1, 1, 1, 0 };
 
 static inline void
-set_flag (struct i8080 *ctx, uint8_t mask)
-{
-  ctx->f |= mask;
-}
-
-static inline void
-clr_flag (struct i8080 *ctx, uint8_t mask)
-{
-  ctx->f &= ~mask;
-}
-
-static inline void
 set_flag_to (struct i8080 *ctx, uint8_t mask, int val)
 {
   if (val == 0)
-    clr_flag (ctx, mask);
+    ctx->f &= ~mask;
   else
-    set_flag (ctx, mask);
-}
-
-static inline uint8_t
-get_flag (struct i8080 *ctx, uint8_t mask)
-{
-  return ((ctx->f & mask) != 0) ? 1 : 0;
+    ctx->f |= mask;
 }
 
 static inline uint16_t
@@ -271,7 +253,7 @@ op_adc (struct i8080 *ctx, uint8_t val)
   uint16_t tmp16;
   uint8_t acindex;
 
-  tmp16 = ctx->a + val + get_flag (ctx, FLAG_C);
+  tmp16 = ctx->a + val + ((ctx->f & FLAG_C) != 0);
   acindex
       = ((ctx->a & 0x88) >> 1) | ((val & 0x88) >> 2) | ((tmp16 & 0x88) >> 3);
   ctx->a = tmp16 & 0xff;
@@ -305,7 +287,7 @@ op_sbb (struct i8080 *ctx, uint8_t val)
   uint16_t tmp16;
   uint8_t acindex;
 
-  tmp16 = ctx->a - val - get_flag (ctx, FLAG_C);
+  tmp16 = ctx->a - val - ((ctx->f & FLAG_C) != 0);
   acindex
       = ((ctx->a & 0x88) >> 1) | ((val & 0x88) >> 2) | ((tmp16 & 0x88) >> 3);
   ctx->a = tmp16 & 0xff;
@@ -322,7 +304,7 @@ op_ana (struct i8080 *ctx, uint8_t val)
   uint8_t tmp8;
 
   tmp8 = ctx->a & val;
-  clr_flag (ctx, FLAG_C);
+  ctx->f &= ~FLAG_C;
   set_flag_to (ctx, FLAG_P, parity_table[tmp8]);
   set_flag_to (ctx, FLAG_AC, ((ctx->a | val) & 0x08) != 0);
   set_flag_to (ctx, FLAG_Z, tmp8 == 0);
@@ -336,9 +318,9 @@ op_xra (struct i8080 *ctx, uint8_t val)
   uint8_t tmp8;
 
   tmp8 = ctx->a ^ val;
-  clr_flag (ctx, FLAG_C);
+  ctx->f &= ~FLAG_C;
   set_flag_to (ctx, FLAG_P, parity_table[tmp8]);
-  clr_flag (ctx, FLAG_AC);
+  ctx->f &= ~FLAG_AC;
   set_flag_to (ctx, FLAG_Z, tmp8 == 0);
   set_flag_to (ctx, FLAG_S, (tmp8 & 0x80) != 0);
   ctx->a = tmp8;
@@ -350,9 +332,9 @@ op_ora (struct i8080 *ctx, uint8_t val)
   uint8_t tmp8;
 
   tmp8 = ctx->a | val;
-  clr_flag (ctx, FLAG_C);
+  ctx->f &= ~FLAG_C;
   set_flag_to (ctx, FLAG_P, parity_table[tmp8]);
-  clr_flag (ctx, FLAG_AC);
+  ctx->f &= ~FLAG_AC;
   set_flag_to (ctx, FLAG_Z, tmp8 == 0);
   set_flag_to (ctx, FLAG_S, (tmp8 & 0x80) != 0);
   ctx->a = tmp8;
@@ -414,14 +396,14 @@ static inline void
 op_rlc (struct i8080 *ctx)
 {
   set_flag_to (ctx, FLAG_C, (ctx->a & 0x80) != 0);
-  ctx->a = (ctx->a << 1) | get_flag (ctx, FLAG_C);
+  ctx->a = (ctx->a << 1) | ((ctx->f & FLAG_C) != 0);
 }
 
 static inline void
 op_rrc (struct i8080 *ctx)
 {
   set_flag_to (ctx, FLAG_C, ctx->a & 0x01);
-  ctx->a = (ctx->a >> 1) | (get_flag (ctx, FLAG_C) << 7);
+  ctx->a = (ctx->a >> 1) | (((ctx->f & FLAG_C) != 0) << 7);
 }
 
 static inline void
@@ -429,7 +411,7 @@ op_ral (struct i8080 *ctx)
 {
   uint8_t tmp8;
 
-  tmp8 = get_flag (ctx, FLAG_C);
+  tmp8 = ((ctx->f & FLAG_C) != 0);
   set_flag_to (ctx, FLAG_C, (ctx->a & 0x80) != 0);
   ctx->a = (ctx->a << 1) | tmp8;
 }
@@ -439,7 +421,7 @@ op_rar (struct i8080 *ctx)
 {
   uint8_t tmp8;
 
-  tmp8 = get_flag (ctx, FLAG_C);
+  tmp8 = ((ctx->f & FLAG_C) != 0);
   set_flag_to (ctx, FLAG_C, ctx->a & 0x01);
   ctx->a = (ctx->a >> 1) | (tmp8 << 7);
 }
@@ -451,8 +433,8 @@ op_daa (struct i8080 *ctx)
 
   ahi = (ctx->a >> 4) & 0x0f;
   alo = ctx->a & 0x0f;
-  c = get_flag (ctx, FLAG_C);
-  auxc = get_flag (ctx, FLAG_AC);
+  c = ((ctx->f & FLAG_C) != 0);
+  auxc = ((ctx->f & FLAG_AC) != 0);
   newc = inc = 0;
 
   if (alo > 9 || auxc != 0)
@@ -749,7 +731,7 @@ i8080_exec_opcode (struct i8080 *ctx, uint8_t opcode)
       ctx->cycles += 10;
       break;
     case 0x37: /* STC */
-      set_flag (ctx, FLAG_C);
+      ctx->f |= FLAG_C;
       ctx->cycles += 4;
       break;
     case 0x38: /* NOP (Undocumented) */
@@ -780,10 +762,10 @@ i8080_exec_opcode (struct i8080 *ctx, uint8_t opcode)
       ctx->cycles += 7;
       break;
     case 0x3f: /* CMC */
-      if (get_flag (ctx, FLAG_C) == 0)
-        set_flag (ctx, FLAG_C);
+      if (ctx->f & FLAG_C)
+        ctx->f &= ~FLAG_C;
       else
-        clr_flag (ctx, FLAG_C);
+        ctx->f |= FLAG_C;
       ctx->cycles += 4;
       break;
     case 0x40: /* MOV B, B */
@@ -1299,22 +1281,20 @@ i8080_exec_opcode (struct i8080 *ctx, uint8_t opcode)
       ctx->cycles += 4;
       break;
     case 0xc0: /* RNZ */
-      if (get_flag (ctx, FLAG_Z) == 0)
+      if (!(ctx->f & FLAG_Z))
         {
           op_ret (ctx);
           ctx->cycles += 11;
         }
       else
-        {
-          ctx->cycles += 5;
-        }
+        ctx->cycles += 5;
       break;
     case 0xc1: /* POP B */
       set_bc (ctx, pop_word (ctx));
       ctx->cycles += 10;
       break;
     case 0xc2: /* JNZ */
-      if (get_flag (ctx, FLAG_Z) == 0)
+      if (!(ctx->f & FLAG_Z))
         op_jmp (ctx);
       else
         ctx->pc += 2;
@@ -1325,7 +1305,7 @@ i8080_exec_opcode (struct i8080 *ctx, uint8_t opcode)
       ctx->cycles += 10;
       break;
     case 0xc4: /* CNZ */
-      if (get_flag (ctx, FLAG_Z) == 0)
+      if (!(ctx->f & FLAG_Z))
         {
           op_call (ctx);
           ctx->cycles += 17;
@@ -1349,22 +1329,20 @@ i8080_exec_opcode (struct i8080 *ctx, uint8_t opcode)
       ctx->cycles += 11;
       break;
     case 0xc8: /* RZ */
-      if (get_flag (ctx, FLAG_Z) != 0)
+      if (ctx->f & FLAG_Z)
         {
           op_ret (ctx);
           ctx->cycles += 11;
         }
       else
-        {
-          ctx->cycles += 5;
-        }
+        ctx->cycles += 5;
       break;
     case 0xc9: /* RET */
       op_ret (ctx);
       ctx->cycles += 10;
       break;
     case 0xca: /* JZ */
-      if (get_flag (ctx, FLAG_Z) != 0)
+      if (ctx->f & FLAG_Z)
         op_jmp (ctx);
       else
         ctx->pc += 2;
@@ -1375,7 +1353,7 @@ i8080_exec_opcode (struct i8080 *ctx, uint8_t opcode)
       ctx->cycles += 10;
       break;
     case 0xcc: /* CZ */
-      if (get_flag (ctx, FLAG_Z) != 0)
+      if (ctx->f & FLAG_Z)
         {
           op_call (ctx);
           ctx->cycles += 17;
@@ -1399,22 +1377,20 @@ i8080_exec_opcode (struct i8080 *ctx, uint8_t opcode)
       ctx->cycles += 11;
       break;
     case 0xd0: /* RNC */
-      if (get_flag (ctx, FLAG_C) == 0)
+      if (!(ctx->f & FLAG_C))
         {
           op_ret (ctx);
           ctx->cycles += 11;
         }
       else
-        {
-          ctx->cycles += 5;
-        }
+        ctx->cycles += 5;
       break;
     case 0xd1: /* POP D */
       set_de (ctx, pop_word (ctx));
       ctx->cycles += 10;
       break;
     case 0xd2: /* JNC */
-      if (get_flag (ctx, FLAG_C) == 0)
+      if (!(ctx->f & FLAG_C))
         op_jmp (ctx);
       else
         ctx->pc += 2;
@@ -1425,7 +1401,7 @@ i8080_exec_opcode (struct i8080 *ctx, uint8_t opcode)
       ctx->cycles += 10;
       break;
     case 0xd4: /* CNC */
-      if (get_flag (ctx, FLAG_C) == 0)
+      if (!(ctx->f & FLAG_C))
         {
           op_call (ctx);
           ctx->cycles += 17;
@@ -1449,22 +1425,20 @@ i8080_exec_opcode (struct i8080 *ctx, uint8_t opcode)
       ctx->cycles += 11;
       break;
     case 0xd8: /* RC */
-      if (get_flag (ctx, FLAG_C) != 0)
+      if (ctx->f & FLAG_C)
         {
           op_ret (ctx);
           ctx->cycles += 11;
         }
       else
-        {
-          ctx->cycles += 5;
-        }
+        ctx->cycles += 5;
       break;
     case 0xd9: /* RET (Undocumented) */
       op_ret (ctx);
       ctx->cycles += 10;
       break;
     case 0xda: /* JC */
-      if (get_flag (ctx, FLAG_C) != 0)
+      if (ctx->f & FLAG_C)
         op_jmp (ctx);
       else
         ctx->pc += 2;
@@ -1475,7 +1449,7 @@ i8080_exec_opcode (struct i8080 *ctx, uint8_t opcode)
       ctx->cycles += 10;
       break;
     case 0xdc: /* CC */
-      if (get_flag (ctx, FLAG_C) != 0)
+      if (ctx->f & FLAG_C)
         {
           op_call (ctx);
           ctx->cycles += 17;
@@ -1499,22 +1473,20 @@ i8080_exec_opcode (struct i8080 *ctx, uint8_t opcode)
       ctx->cycles += 11;
       break;
     case 0xe0: /* RPO */
-      if (get_flag (ctx, FLAG_P) == 0)
+      if (!(ctx->f & FLAG_P))
         {
           op_ret (ctx);
           ctx->cycles += 11;
         }
       else
-        {
-          ctx->cycles += 5;
-        }
+        ctx->cycles += 5;
       break;
     case 0xe1: /* POP H */
       set_hl (ctx, pop_word (ctx));
       ctx->cycles += 10;
       break;
     case 0xe2: /* JPO */
-      if (get_flag (ctx, FLAG_P) == 0)
+      if (!(ctx->f & FLAG_P))
         op_jmp (ctx);
       else
         ctx->pc += 2;
@@ -1525,7 +1497,7 @@ i8080_exec_opcode (struct i8080 *ctx, uint8_t opcode)
       ctx->cycles += 18;
       break;
     case 0xe4: /* CPO */
-      if (get_flag (ctx, FLAG_P) == 0)
+      if (!(ctx->f & FLAG_P))
         {
           op_call (ctx);
           ctx->cycles += 17;
@@ -1549,22 +1521,20 @@ i8080_exec_opcode (struct i8080 *ctx, uint8_t opcode)
       ctx->cycles += 11;
       break;
     case 0xe8: /* RPE */
-      if (get_flag (ctx, FLAG_P) != 0)
+      if (ctx->f & FLAG_P)
         {
           op_ret (ctx);
           ctx->cycles += 11;
         }
       else
-        {
-          ctx->cycles += 5;
-        }
+        ctx->cycles += 5;
       break;
     case 0xe9: /* PCHL */
       ctx->pc = get_hl (ctx);
       ctx->cycles += 5;
       break;
     case 0xea: /* JPE */
-      if (get_flag (ctx, FLAG_P) != 0)
+      if (ctx->f & FLAG_P)
         op_jmp (ctx);
       else
         ctx->pc += 2;
@@ -1575,7 +1545,7 @@ i8080_exec_opcode (struct i8080 *ctx, uint8_t opcode)
       ctx->cycles += 5;
       break;
     case 0xec: /* CPE */
-      if (get_flag (ctx, FLAG_P) != 0)
+      if (ctx->f & FLAG_P)
         {
           op_call (ctx);
           ctx->cycles += 17;
@@ -1599,15 +1569,13 @@ i8080_exec_opcode (struct i8080 *ctx, uint8_t opcode)
       ctx->cycles += 11;
       break;
     case 0xf0: /* RP */
-      if (get_flag (ctx, FLAG_S) == 0)
+      if (!(ctx->f & FLAG_S))
         {
           op_ret (ctx);
           ctx->cycles += 11;
         }
       else
-        {
-          ctx->cycles += 5;
-        }
+        ctx->cycles += 5;
       break;
     case 0xf1: /* POP PSW */
       set_psw (ctx, pop_word (ctx));
@@ -1618,7 +1586,7 @@ i8080_exec_opcode (struct i8080 *ctx, uint8_t opcode)
       ctx->cycles += 10;
       break;
     case 0xf2: /* JP */
-      if (get_flag (ctx, FLAG_S) == 0)
+      if (!(ctx->f & FLAG_S))
         op_jmp (ctx);
       else
         ctx->pc += 2;
@@ -1629,7 +1597,7 @@ i8080_exec_opcode (struct i8080 *ctx, uint8_t opcode)
       ctx->cycles += 4;
       break;
     case 0xf4: /* CP */
-      if (get_flag (ctx, FLAG_S) == 0)
+      if (!(ctx->f & FLAG_S))
         {
           op_call (ctx);
           ctx->cycles += 17;
@@ -1657,22 +1625,20 @@ i8080_exec_opcode (struct i8080 *ctx, uint8_t opcode)
       ctx->cycles += 11;
       break;
     case 0xf8: /* RM */
-      if (get_flag (ctx, FLAG_S) != 0)
+      if (ctx->f & FLAG_S)
         {
           op_ret (ctx);
           ctx->cycles += 11;
         }
       else
-        {
-          ctx->cycles += 5;
-        }
+        ctx->cycles += 5;
       break;
     case 0xf9: /* SPHL */
       ctx->sp = get_hl (ctx);
       ctx->cycles += 5;
       break;
     case 0xfa: /* JM */
-      if (get_flag (ctx, FLAG_S) != 0)
+      if (ctx->f & FLAG_S)
         op_jmp (ctx);
       else
         ctx->pc += 2;
@@ -1683,7 +1649,7 @@ i8080_exec_opcode (struct i8080 *ctx, uint8_t opcode)
       ctx->cycles += 4;
       break;
     case 0xfc: /* CM */
-      if (get_flag (ctx, FLAG_S) != 0)
+      if (ctx->f & FLAG_S)
         {
           op_call (ctx);
           ctx->cycles += 17;
