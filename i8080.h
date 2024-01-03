@@ -26,6 +26,7 @@
 #ifndef I8080_H
 #define I8080_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 struct i8080
@@ -41,10 +42,10 @@ struct i8080
   uint16_t sp; /* Stack pointer */
   uint16_t pc; /* Program counter */
   uint8_t halted;
-  uint8_t int_enable;    /* INTE - Interrupt enable */
-  uint8_t int_requested; /* INT - Interrupt requested */
-  uint8_t int_opcode;    /* In case someone interrupts with a 0x00 nop? */
-  uint64_t cycles;
+  bool int_enable;    /* INTE - Interrupt enable */
+  bool int_requested; /* INT - Interrupt requested */
+  uint8_t int_opcode; /* In case someone interrupts with a 0x00 nop? */
+  uintmax_t cycles;
   void *opaque;
   uint8_t (*read_byte) (void *, uint16_t);
   void (*write_byte) (void *, uint16_t, uint8_t);

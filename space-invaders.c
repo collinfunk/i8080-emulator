@@ -27,6 +27,7 @@
 #include <sys/types.h>
 
 #include <errno.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -103,10 +104,10 @@ struct spaceinvaders
   SDL_Renderer *renderer;
   SDL_Texture *texture;
   SDL_Event event;
-  uint8_t sdl_started; /* SDL_Quit() */
-  uint8_t exit_flag;   /* Signals the end of the loop. */
-  uint8_t pause_flag;  /* 1 if emulation is paused. */
-  uint8_t color_flag;  /* 1 for color, 0 for black and white */
+  bool sdl_started; /* SDL_Quit() */
+  bool exit_flag;   /* Signals the end of the loop. */
+  bool pause_flag;  /* 1 if emulation is paused. */
+  bool color_flag;  /* 1 for color, 0 for black and white */
   uint32_t *video_buffer;
   uint8_t inp0;         /* Input port 0, unused? */
   uint8_t inp1;         /* Input port 1 */
@@ -115,8 +116,6 @@ struct spaceinvaders
   uint8_t shift1;       /* Shift register msb */
   uint8_t shift_offset; /* Shift offset */
   uint8_t next_int;     /* RST 1 (0xcf) or RST 2 (0xd7) */
-  void *tpixels;        /* SDL_LockTexture() */
-  int tpitch;           /* SDL_LockTexture() */
   uint32_t curr_time;
   uint32_t prev_time;
   uint32_t delta_time;
@@ -137,12 +136,12 @@ static void spaceinvaders_handle_keydown (struct spaceinvaders *,
                                           SDL_Scancode);
 static void spaceinvaders_handle_keyup (struct spaceinvaders *, SDL_Scancode);
 static void spaceinvaders_handle_cpu (struct spaceinvaders *);
-static inline void spaceinvaders_set_pixel (struct spaceinvaders *, uint32_t,
-                                            uint32_t, uint32_t);
-static inline void spaceinvaders_handle_vram_bit (struct spaceinvaders *,
-                                                  uint8_t, uint32_t, uint32_t);
+static void spaceinvaders_set_pixel (struct spaceinvaders *, uint32_t,
+                                     uint32_t, uint32_t);
+static void spaceinvaders_handle_vram_bit (struct spaceinvaders *, uint8_t,
+                                           uint32_t, uint32_t);
 static void spaceinvaders_handle_vram (struct spaceinvaders *);
-static inline uint32_t spaceinvaders_get_deltatime32 (struct spaceinvaders *);
+static uint32_t spaceinvaders_get_deltatime32 (struct spaceinvaders *);
 static void spaceinvaders_loop (struct spaceinvaders *);
 
 int
@@ -158,7 +157,7 @@ main (int argc, char **argv)
     goto fail;
   if (sdl_init (emu) < 0)
     goto fail;
-  for (emu->exit_flag = 0; emu->exit_flag == 0;)
+  while (!emu->exit_flag)
     spaceinvaders_loop (emu);
   spaceinvaders_destroy (emu);
   return 0;
@@ -189,7 +188,7 @@ spaceinvaders_create (void)
   emu->cpu.write_byte = spaceinvaders_write_byte;
   emu->cpu.io_inb = spaceinvaders_io_inb;
   emu->cpu.io_outb = spaceinvaders_io_outb;
-  emu->color_flag = 1;
+  emu->color_flag = true;
   emu->next_int = 0xcf;
   return emu;
 }
@@ -206,7 +205,7 @@ spaceinvaders_destroy (struct spaceinvaders *emu)
     SDL_DestroyRenderer (emu->renderer);
   if (emu->window != NULL)
     SDL_DestroyWindow (emu->window);
-  if (emu->sdl_started != 0)
+  if (emu->sdl_started)
     SDL_Quit ();
   free (emu);
 }
@@ -221,7 +220,7 @@ sdl_init (struct spaceinvaders *emu)
     }
 
   /* Flag for cleaning up with SDL_Quit(). */
-  emu->sdl_started = 1;
+  emu->sdl_started = true;
   /* User defined ratios for screen? */
   emu->window
       = SDL_CreateWindow ("Space Invaders Emulator", SDL_WINDOWPOS_CENTERED,
@@ -338,25 +337,25 @@ spaceinvaders_read_byte (void *emuptr, uint16_t address)
 {
   struct spaceinvaders *emu = (struct spaceinvaders *) emuptr;
 
-  if (emu->memory_size <= address || 0x6000 <= address)
-    return 0;
-  /* Mirror */
-  if (address >= 0x4000)
-    return emu->memory[address - 0x2000];
-  return emu->memory[address];
+  if (emu->memory_size > address && address <= UINT16_C (0x6000))
+    {
+      if (address < UINT16_C (0x4000))
+        return emu->memory[address];
+      else
+        return emu->memory[address - UINT16_C (0x2000)];
+    }
+  else
+    return UINT8_C (0);
 }
 
 static void
-spaceinvaders_write_byte (void *emuptr, uint16_t address, uint8_t val)
+spaceinvaders_write_byte (void *emuptr, uint16_t address, uint8_t value)
 {
   struct spaceinvaders *emu = (struct spaceinvaders *) emuptr;
 
-  if (emu->memory_size <= address)
-    return;
-  /* Read only */
-  if (address < 0x2000 || address > 0x4000)
-    return;
-  emu->memory[address] = val;
+  if (emu->memory_size > address && address >= UINT16_C (0x2000)
+      && address <= UINT16_C (0x4000))
+    emu->memory[address] = value;
 }
 
 static uint8_t
@@ -417,14 +416,15 @@ spaceinvaders_io_outb (void *emuptr, uint8_t port, uint8_t val)
 static void
 spaceinvaders_update_texture (struct spaceinvaders *emu)
 {
-  emu->tpixels = NULL;
-  emu->tpitch = 0;
-  if (SDL_LockTexture (emu->texture, NULL, &emu->tpixels, &emu->tpitch) < 0)
+  void *pixels = NULL;
+  int pitch;
+
+  if (SDL_LockTexture (emu->texture, NULL, &pixels, &pitch) < 0)
     {
       fprintf (stderr, "SDL_LockTexture(): %s.\n", SDL_GetError ());
       return;
     }
-  memcpy (emu->tpixels, emu->video_buffer, emu->tpitch * SI_SCREEN_HEIGHT);
+  memcpy (pixels, emu->video_buffer, pitch * SI_SCREEN_HEIGHT);
   SDL_UnlockTexture (emu->texture);
 }
 
@@ -488,13 +488,13 @@ spaceinvaders_handle_keydown (struct spaceinvaders *emu, SDL_Scancode key)
       emu->inp2 |= 0x40;
       break;
     case SDL_SCANCODE_ESCAPE: /* Exit */
-      emu->exit_flag = 1;
+      emu->exit_flag = false;
       break;
     case SDL_SCANCODE_E: /* Toggle color emulation */
-      emu->color_flag = (emu->color_flag == 1) ? 0 : 1;
+      emu->color_flag = (emu->color_flag == 1);
       break;
     case SDL_SCANCODE_Q: /* Pause toggle */
-      emu->pause_flag = (emu->pause_flag == 0) ? 1 : 0;
+      emu->pause_flag = (emu->pause_flag == 0);
     default:
       break;
     }
@@ -581,7 +581,7 @@ spaceinvaders_handle_cpu (struct spaceinvaders *emu)
  * in spaceinvaders_handle_vram_bit() you can see the overlay which might help
  * if actual dimensions are out there somewhere.
  */
-static inline void
+static void
 spaceinvaders_set_pixel (struct spaceinvaders *emu, uint32_t off, uint32_t cx,
                          uint32_t cy)
 {
@@ -628,7 +628,7 @@ spaceinvaders_set_pixel (struct spaceinvaders *emu, uint32_t off, uint32_t cx,
  * clockwise. A good diagram is at the bottom of this page:
  * https://computerarcheology.com/Arcade/SpaceInvaders/Hardware.html
  */
-static inline void
+static void
 spaceinvaders_handle_vram_bit (struct spaceinvaders *emu, uint8_t cb,
                                uint32_t xoff, uint32_t y)
 {
@@ -650,7 +650,7 @@ spaceinvaders_handle_vram_bit (struct spaceinvaders *emu, uint8_t cb,
       /* Unlit pixels */
       if (set == 0)
         vbuff[off] = SI_ABGR_BLACK;
-      else if (emu->color_flag == 1)
+      else if (emu->color_flag)
         spaceinvaders_set_pixel (emu, off, cx, cy);
       else
         vbuff[off] = SI_ABGR_WHITE;
@@ -679,7 +679,7 @@ spaceinvaders_handle_vram (struct spaceinvaders *emu)
  * still uses version 2.0.14. This function just handles any overflows if
  * someone spends ~49 days on space invaders.
  */
-static inline uint32_t
+static uint32_t
 spaceinvaders_get_deltatime32 (struct spaceinvaders *emu)
 {
   /* Only time this happens is if curr_time overflows. */
@@ -700,7 +700,7 @@ spaceinvaders_loop (struct spaceinvaders *emu)
   while (SDL_PollEvent (&emu->event) != 0)
     {
       if (emu->event.type == SDL_QUIT)
-        emu->exit_flag = 1;
+        emu->exit_flag = true;
       else if (emu->event.type == SDL_KEYDOWN)
         {
           kp = emu->event.key.keysym.scancode;
@@ -714,7 +714,7 @@ spaceinvaders_loop (struct spaceinvaders *emu)
     }
 
   /* If delta time is 0 we can chill. */
-  if (emu->delta_time > 0 && emu->pause_flag == 0)
+  if (emu->delta_time > 0 && !emu->pause_flag)
     {
       spaceinvaders_handle_cpu (emu);
       spaceinvaders_update_screen (emu);

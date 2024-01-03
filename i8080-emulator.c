@@ -54,7 +54,6 @@ int
 main (int argc, char **argv)
 {
   struct emulator *emu;
-  struct i8080 *cpu;
   uintmax_t opcount;
 
   if (argc != 2)
@@ -67,7 +66,6 @@ main (int argc, char **argv)
       exit (1);
     }
 
-  cpu = &emu->cpu;
   if (emulator_load_file (emu, argv[1], 0x100) < 0)
     {
       emulator_destroy (emu);
@@ -83,12 +81,12 @@ main (int argc, char **argv)
   /* RET */
   emu->memory[0x0007] = 0xc9;
 
-  for (cpu->halted = opcount = 0; cpu->halted == 0; ++opcount)
-    i8080_step (cpu);
+  for (emu->cpu.halted = opcount = 0; emu->cpu.halted == 0; ++opcount)
+    i8080_step (&emu->cpu);
 
   printf ("\n");
-  printf ("Instruction count: %ju\n", (uintmax_t) opcount);
-  printf ("Cycle count:       %ju\n", (uintmax_t) cpu->cycles);
+  printf ("Instruction count: %ju\n", opcount);
+  printf ("Cycle count:       %ju\n", &emu->cpu.cycles);
   emulator_destroy (emu);
   return 0;
 }
@@ -194,19 +192,16 @@ emulator_read_byte (void *emuptr, uint16_t address)
 {
   struct emulator *emu = (struct emulator *) emuptr;
 
-  if (emu->memory_size <= address)
-    return 0;
-  return emu->memory[address];
+  return (emu->memory_size > address) ? emu->memory[address] : UINT8_C (0);
 }
 
 static void
-emulator_write_byte (void *emuptr, uint16_t address, uint8_t val)
+emulator_write_byte (void *emuptr, uint16_t address, uint8_t value)
 {
   struct emulator *emu = (struct emulator *) emuptr;
 
-  if (emu->memory_size <= address)
-    return;
-  emu->memory[address] = val;
+  if (emu->memory_size > address)
+    emu->memory[address] = value;
 }
 
 static uint8_t
@@ -224,7 +219,7 @@ emulator_io_inb (void *emuptr, uint8_t port)
  * DE. Characters a read and printed until a terminating $ character.
  */
 static void
-emulator_io_outb (void *emuptr, uint8_t port, uint8_t val)
+emulator_io_outb (void *emuptr, uint8_t port, uint8_t value)
 {
   struct emulator *emu = (struct emulator *) emuptr;
   struct i8080 *cpu = &emu->cpu;

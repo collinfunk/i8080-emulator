@@ -23,6 +23,7 @@
  * SUCH DAMAGE.
  */
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -64,7 +65,7 @@ static const uint8_t ac_table[8] = { 0, 0, 1, 0, 1, 0, 1, 1 };
 
 static const uint8_t subtract_ac_table[8] = { 1, 0, 0, 0, 1, 1, 1, 0 };
 
-static inline void
+static void
 set_flag_to (struct i8080 *ctx, uint8_t mask, int val)
 {
   if (val == 0)
@@ -73,91 +74,91 @@ set_flag_to (struct i8080 *ctx, uint8_t mask, int val)
     ctx->f |= mask;
 }
 
-static inline uint16_t
+static uint16_t
 get_psw (struct i8080 *ctx)
 {
   return ((uint16_t) ctx->a << 8) | ((uint16_t) ctx->f);
 }
 
-static inline uint16_t
+static uint16_t
 get_bc (struct i8080 *ctx)
 {
   return ((uint16_t) ctx->b << 8) | ((uint16_t) ctx->c);
 }
 
-static inline uint16_t
+static uint16_t
 get_de (struct i8080 *ctx)
 {
   return ((uint16_t) ctx->d << 8) | ((uint16_t) ctx->e);
 }
 
-static inline uint16_t
+static uint16_t
 get_hl (struct i8080 *ctx)
 {
   return ((uint16_t) ctx->h << 8) | ((uint16_t) ctx->l);
 }
 
-static inline void
+static void
 set_psw (struct i8080 *ctx, uint16_t val)
 {
   ctx->a = (val >> 8) & 0xff;
   ctx->f = val & 0xff;
 }
 
-static inline void
+static void
 set_bc (struct i8080 *ctx, uint16_t val)
 {
   ctx->b = (val >> 8) & 0xff;
   ctx->c = val & 0xff;
 }
 
-static inline void
+static void
 set_de (struct i8080 *ctx, uint16_t val)
 {
   ctx->d = (val >> 8) & 0xff;
   ctx->e = val & 0xff;
 }
 
-static inline void
+static void
 set_hl (struct i8080 *ctx, uint16_t val)
 {
   ctx->h = (val >> 8) & 0xff;
   ctx->l = val & 0xff;
 }
 
-static inline uint8_t
+static uint8_t
 read_byte (struct i8080 *ctx, uint16_t address)
 {
   return ctx->read_byte (ctx->opaque, address);
 }
 
-static inline void
+static void
 write_byte (struct i8080 *ctx, uint16_t address, uint8_t val)
 {
   ctx->write_byte (ctx->opaque, address, val);
 }
 
-static inline uint16_t
+static uint16_t
 read_word (struct i8080 *ctx, uint16_t address)
 {
   return ((uint16_t) read_byte (ctx, address))
          | ((uint16_t) read_byte (ctx, address + 1) << 8);
 }
 
-static inline void
+static void
 write_word (struct i8080 *ctx, uint16_t address, uint16_t val)
 {
   write_byte (ctx, address, val & 0xff);
   write_byte (ctx, address + 1, (val >> 8) & 0xff);
 }
 
-static inline uint8_t
+static uint8_t
 fetch_byte (struct i8080 *ctx)
 {
   return read_byte (ctx, ctx->pc++);
 }
 
-static inline uint16_t
+static uint16_t
 fetch_word (struct i8080 *ctx)
 {
   uint16_t w;
@@ -167,7 +168,7 @@ fetch_word (struct i8080 *ctx)
   return w;
 }
 
-static inline uint16_t
+static uint16_t
 pop_word (struct i8080 *ctx)
 {
   uint16_t w;
@@ -177,40 +178,40 @@ pop_word (struct i8080 *ctx)
   return w;
 }
 
-static inline void
+static void
 push_word (struct i8080 *ctx, uint16_t val)
 {
   ctx->sp -= 2;
   write_word (ctx, ctx->sp, val);
 }
 
-static inline void
+static void
 op_jmp (struct i8080 *ctx)
 {
   ctx->pc = fetch_word (ctx);
 }
 
-static inline void
+static void
 op_call (struct i8080 *ctx)
 {
   push_word (ctx, ctx->pc + 2);
   ctx->pc = fetch_word (ctx);
 }
 
-static inline void
+static void
 op_ret (struct i8080 *ctx)
 {
   ctx->pc = pop_word (ctx);
 }
 
-static inline void
+static void
 op_rst (struct i8080 *ctx, uint16_t address)
 {
   push_word (ctx, ctx->pc);
   ctx->pc = address;
 }
 
-static inline void
+static void
 op_xchg (struct i8080 *ctx)
 {
   uint16_t tmp16;
@@ -220,7 +221,7 @@ op_xchg (struct i8080 *ctx)
   set_de (ctx, tmp16);
 }
 
-static inline void
+static void
 op_xthl (struct i8080 *ctx)
 {
   uint16_t tmp16;
@@ -230,7 +231,7 @@ op_xthl (struct i8080 *ctx)
   set_hl (ctx, tmp16);
 }
 
-static inline void
+static void
 op_add (struct i8080 *ctx, uint8_t val)
 {
   uint16_t tmp16;
@@ -247,7 +248,7 @@ op_add (struct i8080 *ctx, uint8_t val)
   set_flag_to (ctx, FLAG_S, (ctx->a & 0x80) != 0);
 }
 
-static inline void
+static void
 op_adc (struct i8080 *ctx, uint8_t val)
 {
   uint16_t tmp16;
@@ -264,7 +265,7 @@ op_adc (struct i8080 *ctx, uint8_t val)
   set_flag_to (ctx, FLAG_S, (ctx->a & 0x80) != 0);
 }
 
-static inline void
+static void
 op_sub (struct i8080 *ctx, uint8_t val)
 {
   uint16_t tmp16;
@@ -281,7 +282,7 @@ op_sub (struct i8080 *ctx, uint8_t val)
   set_flag_to (ctx, FLAG_S, (ctx->a & 0x80) != 0);
 }
 
-static inline void
+static void
 op_sbb (struct i8080 *ctx, uint8_t val)
 {
   uint16_t tmp16;
@@ -298,7 +299,7 @@ op_sbb (struct i8080 *ctx, uint8_t val)
   set_flag_to (ctx, FLAG_S, (ctx->a & 0x80) != 0);
 }
 
-static inline void
+static void
 op_ana (struct i8080 *ctx, uint8_t val)
 {
   uint8_t tmp8;
@@ -312,7 +313,7 @@ op_ana (struct i8080 *ctx, uint8_t val)
   ctx->a = tmp8;
 }
 
-static inline void
+static void
 op_xra (struct i8080 *ctx, uint8_t val)
 {
   uint8_t tmp8;
@@ -326,7 +327,7 @@ op_xra (struct i8080 *ctx, uint8_t val)
   ctx->a = tmp8;
 }
 
-static inline void
+static void
 op_ora (struct i8080 *ctx, uint8_t val)
 {
   uint8_t tmp8;
@@ -340,7 +341,7 @@ op_ora (struct i8080 *ctx, uint8_t val)
   ctx->a = tmp8;
 }
 
-static inline void
+static void
 op_cmp (struct i8080 *ctx, uint8_t val)
 {
   uint16_t tmp16;
@@ -356,7 +357,7 @@ op_cmp (struct i8080 *ctx, uint8_t val)
   set_flag_to (ctx, FLAG_S, (tmp16 & 0x80) != 0);
 }
 
-static inline uint8_t
+static uint8_t
 op_inr (struct i8080 *ctx, uint8_t val)
 {
   uint8_t tmp8;
@@ -369,7 +370,7 @@ op_inr (struct i8080 *ctx, uint8_t val)
   return tmp8;
 }
 
-static inline uint8_t
+static uint8_t
 op_dcr (struct i8080 *ctx, uint8_t val)
 {
   uint8_t tmp8;
@@ -382,7 +383,7 @@ op_dcr (struct i8080 *ctx, uint8_t val)
   return tmp8;
 }
 
-static inline void
+static void
 op_dad (struct i8080 *ctx, uint16_t val)
 {
   uint32_t tmp32;
@@ -392,21 +393,21 @@ op_dad (struct i8080 *ctx, uint16_t val)
   set_hl (ctx, tmp32 & 0xffff);
 }
 
-static inline void
+static void
 op_rlc (struct i8080 *ctx)
 {
   set_flag_to (ctx, FLAG_C, (ctx->a & 0x80) != 0);
   ctx->a = (ctx->a << 1) | ((ctx->f & FLAG_C) != 0);
 }
 
-static inline void
+static void
 op_rrc (struct i8080 *ctx)
 {
   set_flag_to (ctx, FLAG_C, ctx->a & 0x01);
   ctx->a = (ctx->a >> 1) | (((ctx->f & FLAG_C) != 0) << 7);
 }
 
-static inline void
+static void
 op_ral (struct i8080 *ctx)
 {
   uint8_t tmp8;
@@ -416,7 +417,7 @@ op_ral (struct i8080 *ctx)
   ctx->a = (ctx->a << 1) | tmp8;
 }
 
-static inline void
+static void
 op_rar (struct i8080 *ctx)
 {
   uint8_t tmp8;
@@ -426,7 +427,7 @@ op_rar (struct i8080 *ctx)
   ctx->a = (ctx->a >> 1) | (tmp8 << 7);
 }
 
-static inline void
+static void
 op_daa (struct i8080 *ctx)
 {
   uint8_t ahi, alo, c, auxc, newc, inc;
@@ -463,8 +464,8 @@ i8080_init (struct i8080 *ctx)
   ctx->sp = 0;
   ctx->pc = 0;
   ctx->halted = 0;
-  ctx->int_enable = 0;
-  ctx->int_requested = 0;
+  ctx->int_enable = false;
+  ctx->int_requested = false;
   ctx->int_opcode = 0;
   ctx->cycles = 0;
   ctx->opaque = NULL;
@@ -478,11 +479,11 @@ void
 i8080_step (struct i8080 *ctx)
 {
   /* If an interrupt is requested */
-  if (ctx->int_requested != 0 && ctx->int_enable != 0)
+  if (ctx->int_requested && ctx->int_enable)
     {
       /* Acknowledge request and reset INTE. */
-      ctx->int_enable = 0;
-      ctx->int_requested = 0;
+      ctx->int_enable = false;
+      ctx->int_requested = false;
       /* Interrupt occured so unhalt */
       ctx->halted = 0;
 
@@ -500,7 +501,7 @@ i8080_step (struct i8080 *ctx)
 void
 i8080_interrupt (struct i8080 *ctx, uint8_t opcode)
 {
-  ctx->int_requested = 1;
+  ctx->int_requested = true;
   ctx->int_opcode = opcode;
 }
 
@@ -1593,7 +1594,7 @@ i8080_exec_opcode (struct i8080 *ctx, uint8_t opcode)
       ctx->cycles += 10;
       break;
     case 0xf3: /* DI */
-      ctx->int_enable = 0;
+      ctx->int_enable = false;
       ctx->cycles += 4;
       break;
     case 0xf4: /* CP */
@@ -1645,7 +1646,7 @@ i8080_exec_opcode (struct i8080 *ctx, uint8_t opcode)
       ctx->cycles += 10;
       break;
     case 0xfb: /* EI */
-      ctx->int_enable = 1;
+      ctx->int_enable = true;
       ctx->cycles += 4;
       break;
     case 0xfc: /* CM */
