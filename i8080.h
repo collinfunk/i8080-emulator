@@ -41,7 +41,7 @@ struct i8080
   uint8_t l;
   uint16_t sp; /* Stack pointer */
   uint16_t pc; /* Program counter */
-  uint8_t halted;
+  bool halted;
   bool int_enable;    /* INTE - Interrupt enable */
   bool int_requested; /* INT - Interrupt requested */
   uint8_t int_opcode; /* In case someone interrupts with a 0x00 nop? */

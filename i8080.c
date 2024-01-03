@@ -463,7 +463,7 @@ i8080_init (struct i8080 *ctx)
   ctx->l = 0;
   ctx->sp = 0;
   ctx->pc = 0;
-  ctx->halted = 0;
+  ctx->halted = false;
   ctx->int_enable = false;
   ctx->int_requested = false;
   ctx->int_opcode = 0;
@@ -485,17 +485,13 @@ i8080_step (struct i8080 *ctx)
       ctx->int_enable = false;
       ctx->int_requested = false;
       /* Interrupt occured so unhalt */
-      ctx->halted = 0;
+      ctx->halted = false;
 
       /* Execute the requested opcode */
       i8080_exec_opcode (ctx, ctx->int_opcode);
-      return;
     }
-
-  /* Wait for an interrupt. */
-  if (ctx->halted != 0)
-    return;
-  i8080_exec_opcode (ctx, fetch_byte (ctx));
+  else if (!ctx->halted)
+    i8080_exec_opcode (ctx, fetch_byte (ctx));
 }
 
 void
@@ -986,7 +982,7 @@ i8080_exec_opcode (struct i8080 *ctx, uint8_t opcode)
       ctx->cycles += 7;
       break;
     case 0x76: /* HLT */
-      ctx->halted = 1;
+      ctx->halted = true;
       ctx->cycles += 7;
       break;
     case 0x77: /* MOV M, A */

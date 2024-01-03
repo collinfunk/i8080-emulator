@@ -103,12 +103,11 @@ struct spaceinvaders
   SDL_Window *window;
   SDL_Renderer *renderer;
   SDL_Texture *texture;
-  SDL_Event event;
-  bool sdl_started; /* SDL_Quit() */
-  bool exit_flag;   /* Signals the end of the loop. */
-  bool pause_flag;  /* 1 if emulation is paused. */
-  bool color_flag;  /* 1 for color, 0 for black and white */
   uint32_t *video_buffer;
+  bool sdl_started;     /* SDL_Quit() */
+  bool exit_flag;       /* Signals the end of the loop. */
+  bool pause_flag;      /* 1 if emulation is paused. */
+  bool color_flag;      /* 1 for color, 0 for black and white */
   uint8_t inp0;         /* Input port 0, unused? */
   uint8_t inp1;         /* Input port 1 */
   uint8_t inp2;         /* Input port 2 */
@@ -692,24 +691,26 @@ spaceinvaders_get_deltatime32 (struct spaceinvaders *emu)
 static void
 spaceinvaders_loop (struct spaceinvaders *emu)
 {
-  SDL_Scancode kp;
+  SDL_Event event;
 
   /* Milliseconds since SDL_Init() */
   emu->curr_time = SDL_GetTicks ();
   emu->delta_time = spaceinvaders_get_deltatime32 (emu);
-  while (SDL_PollEvent (&emu->event) != 0)
+  while (SDL_PollEvent (&event))
     {
-      if (emu->event.type == SDL_QUIT)
-        emu->exit_flag = true;
-      else if (emu->event.type == SDL_KEYDOWN)
+      switch (event.type)
         {
-          kp = emu->event.key.keysym.scancode;
-          spaceinvaders_handle_keydown (emu, kp);
-        }
-      else if (emu->event.type == SDL_KEYUP)
-        {
-          kp = emu->event.key.keysym.scancode;
-          spaceinvaders_handle_keyup (emu, kp);
+        case SDL_QUIT:
+          emu->exit_flag = true;
+          break;
+        case SDL_KEYDOWN:
+          spaceinvaders_handle_keydown (emu, event.key.keysym.scancode);
+          break;
+        case SDL_KEYUP:
+          spaceinvaders_handle_keyup (emu, event.key.keysym.scancode);
+          break;
+        default:
+          break;
         }
     }
 

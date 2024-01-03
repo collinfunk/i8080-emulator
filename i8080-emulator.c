@@ -81,12 +81,12 @@ main (int argc, char **argv)
   /* RET */
   emu->memory[0x0007] = 0xc9;
 
-  for (emu->cpu.halted = opcount = 0; emu->cpu.halted == 0; ++opcount)
+  for (opcount = 0; !emu->cpu.halted; ++opcount)
     i8080_step (&emu->cpu);
 
   printf ("\n");
   printf ("Instruction count: %ju\n", opcount);
-  printf ("Cycle count:       %ju\n", &emu->cpu.cycles);
+  printf ("Cycle count:       %ju\n", emu->cpu.cycles);
   emulator_destroy (emu);
   return 0;
 }
