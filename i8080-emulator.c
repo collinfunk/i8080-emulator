@@ -127,64 +127,61 @@ emulator_load_file (struct emulator *emu, const char *name, uint16_t offset)
 {
   struct stat st;
   FILE *fp;
-  uint8_t *mem;
+  uint8_t *memory;
 
   if (stat (name, &st) < 0)
     {
       fprintf (stderr, "%s: %s.\n", name, strerror (errno));
-      goto err0;
+      return -1;
     }
 
   if (!S_ISREG (st.st_mode))
     {
       fprintf (stderr, "%s: Not a regular file.\n", name);
-      goto err0;
+      return -1;
     }
 
   if (st.st_size <= 0 || st.st_size > UINT16_MAX)
     {
       fprintf (stderr, "%s: Invalid file size (%jd bytes).\n", name,
                (intmax_t) st.st_size);
-      goto err0;
+      return -1;
     }
 
   if (st.st_size + offset > UINT16_MAX)
     {
       fprintf (stderr, "%s: Offset too large to address file.\n", name);
-      goto err0;
+      return -1;
     }
 
   fp = fopen (name, "rb");
   if (fp == NULL)
     {
       fprintf (stderr, "%s: %s.\n", name, strerror (errno));
-      goto err0;
+      return -1;
     }
 
-  mem = calloc (1, 0x10000);
-  if (mem == NULL)
+  memory = (uint8_t *) calloc (1, 0x10000);
+  if (memory == NULL)
     {
       fprintf (stderr, "Memory allocation failed.\n");
-      goto err1;
+      fclose (fp);
+      return -1;
     }
 
-  if (fread (&mem[offset], st.st_size, 1, fp) != 1)
+  if (fread (&memory[offset], st.st_size, 1, fp) != 1)
     {
       fprintf (stderr, "%s: Failed to load file.\n", name);
-      goto err2;
+      fclose (fp);
+      free (memory);
+      return -1;
     }
 
-  emu->memory = mem;
+  emu->memory = memory;
   emu->memory_size = 0x10000;
   emu->cpu.pc = offset;
   fclose (fp);
   return 0;
-err2:
-  free (mem);
-err1:
-  fclose (fp);
-err0:
-  return -1;
 }
 
 static uint8_t
@@ -226,18 +223,19 @@ emulator_io_outb (void *emuptr, uint8_t port, uint8_t value)
   uint16_t de;
   uint8_t ch;
 
-  if (port != 1)
-    return;
-  if (cpu->c == 2)
-    putchar (cpu->e);
-  else if (cpu->c == 9)
+  if (port == 1)
     {
-      de = ((uint16_t) cpu->d << 8) | ((uint16_t) cpu->e);
-      ch = emulator_read_byte (cpu->opaque, de++);
-      while (ch != '$')
+      if (cpu->c == 2)
+        putchar (cpu->e);
+      else if (cpu->c == 9)
         {
-          putchar (ch);
+          de = ((uint16_t) cpu->d << 8) | ((uint16_t) cpu->e);
           ch = emulator_read_byte (cpu->opaque, de++);
+          while (ch != '$')
+            {
+              putchar (ch);
+              ch = emulator_read_byte (cpu->opaque, de++);
+            }
         }
     }
 }

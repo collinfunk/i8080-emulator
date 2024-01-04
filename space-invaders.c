@@ -104,7 +104,6 @@ struct spaceinvaders
   SDL_Renderer *renderer;
   SDL_Texture *texture;
   uint32_t *video_buffer;
-  bool sdl_started;     /* SDL_Quit() */
   bool exit_flag;       /* Signals the end of the loop. */
   bool pause_flag;      /* 1 if emulation is paused. */
   bool color_flag;      /* 1 for color, 0 for black and white */
@@ -151,19 +150,16 @@ main (int argc, char **argv)
     usage ();
   emu = spaceinvaders_create ();
   if (emu == NULL)
-    goto fail;
-  if (spaceinvaders_load_file (emu, argv[1]) < 0)
-    goto fail;
-  if (sdl_init (emu) < 0)
-    goto fail;
+    return 1;
+  if (spaceinvaders_load_file (emu, argv[1]) < 0 || sdl_init (emu) < 0)
+    {
+      spaceinvaders_destroy (emu);
+      return 1;
+    }
   while (!emu->exit_flag)
     spaceinvaders_loop (emu);
   spaceinvaders_destroy (emu);
   return 0;
-fail:
-  if (emu != NULL)
-    spaceinvaders_destroy (emu);
-  exit (1);
 }
 
 static void
@@ -195,79 +191,88 @@ spaceinvaders_create (void)
 static void
 spaceinvaders_destroy (struct spaceinvaders *emu)
 {
-  if (emu == NULL)
-    return;
-  free (emu->video_buffer);
-  if (emu->texture != NULL)
-    SDL_DestroyTexture (emu->texture);
-  if (emu->renderer != NULL)
-    SDL_DestroyRenderer (emu->renderer);
-  if (emu->window != NULL)
-    SDL_DestroyWindow (emu->window);
-  if (emu->sdl_started)
-    SDL_Quit ();
-  free (emu);
+  if (emu != NULL)
+    {
+      SDL_DestroyTexture (emu->texture);
+      SDL_DestroyRenderer (emu->renderer);
+      SDL_DestroyWindow (emu->window);
+      SDL_Quit ();
+      free (emu->video_buffer);
+      free (emu->memory);
+      free (emu);
+    }
 }
 
 static int
 sdl_init (struct spaceinvaders *emu)
 {
+  SDL_Window *window;
+  SDL_Renderer *renderer;
+  SDL_Texture *texture;
+  uint32_t *video_buffer;
+
   if (SDL_Init (SDL_INIT_VIDEO) < 0)
     {
       fprintf (stderr, "SDL_Init(): %s.\n", SDL_GetError ());
       return -1;
     }
 
-  /* Flag for cleaning up with SDL_Quit(). */
-  emu->sdl_started = true;
   /* User defined ratios for screen? */
-  emu->window
-      = SDL_CreateWindow ("Space Invaders Emulator", SDL_WINDOWPOS_CENTERED,
-                          SDL_WINDOWPOS_CENTERED, SI_SCREEN_WIDTH * 4,
-                          SI_SCREEN_HEIGHT * 4, SDL_WINDOW_RESIZABLE);
-
-  if (emu->window == NULL)
+  window = SDL_CreateWindow ("Space Invaders Emulator", SDL_WINDOWPOS_CENTERED,
+                             SDL_WINDOWPOS_CENTERED, SI_SCREEN_WIDTH * 4,
+                             SI_SCREEN_HEIGHT * 4, SDL_WINDOW_RESIZABLE);
+  if (window == NULL)
     {
       fprintf (stderr, "SDL_CreateWindow(): %s.\n", SDL_GetError ());
       return -1;
     }
 
-  emu->renderer = SDL_CreateRenderer (
-      emu->window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-  if (emu->renderer == NULL)
+  renderer = SDL_CreateRenderer (
+      window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+  if (renderer == NULL)
     {
       fprintf (stderr, "SDL_CreateRenderer(): %s.\n", SDL_GetError ());
+      SDL_DestroyWindow (window);
       return -1;
     }
 
   /* If window is maximized it won't stretch. */
-  if (SDL_RenderSetLogicalSize (emu->renderer, SI_SCREEN_WIDTH,
-                                SI_SCREEN_HEIGHT)
+  if (SDL_RenderSetLogicalSize (renderer, SI_SCREEN_WIDTH, SI_SCREEN_HEIGHT)
       < 0)
     {
       fprintf (stderr, "SDL_RendererSetLogicalSize(): %s.\n", SDL_GetError ());
+      SDL_DestroyWindow (window);
+      SDL_DestroyRenderer (renderer);
       return -1;
     }
 
-  emu->texture = SDL_CreateTexture (emu->renderer, SDL_PIXELFORMAT_ABGR8888,
-                                    SDL_TEXTUREACCESS_STREAMING,
-                                    SI_SCREEN_WIDTH, SI_SCREEN_HEIGHT);
-
-  if (emu->texture == NULL)
+  texture = SDL_CreateTexture (renderer, SDL_PIXELFORMAT_ABGR8888,
+                               SDL_TEXTUREACCESS_STREAMING, SI_SCREEN_WIDTH,
+                               SI_SCREEN_HEIGHT);
+  if (texture == NULL)
     {
       fprintf (stderr, "SDL_CreateTexture(): %s.\n", SDL_GetError ());
+      SDL_DestroyWindow (window);
+      SDL_DestroyRenderer (renderer);
       return -1;
     }
 
-  emu->video_buffer = calloc (1, 224 * 256 * 4);
-  if (emu->video_buffer == NULL)
+  video_buffer = (uint32_t *) calloc (sizeof (uint32_t),
+                                      SI_SCREEN_WIDTH * SI_SCREEN_HEIGHT);
+  if (video_buffer == NULL)
     {
       fprintf (stderr, "Failed to allocate video memory.\n");
+      SDL_DestroyWindow (window);
+      SDL_DestroyRenderer (renderer);
+      SDL_DestroyTexture (texture);
       return -1;
     }
 
-  SDL_UpdateTexture (emu->texture, NULL, emu->video_buffer,
-                     4 * SI_SCREEN_WIDTH);
+  SDL_UpdateTexture (texture, NULL, video_buffer, 4 * SI_SCREEN_WIDTH);
+  emu->window = window;
+  emu->renderer = renderer;
+  emu->texture = texture;
+  emu->video_buffer = video_buffer;
   return 0;
 }
 
@@ -276,59 +281,56 @@ spaceinvaders_load_file (struct spaceinvaders *emu, const char *file)
 {
   struct stat st;
   FILE *fp;
-  uint8_t *mem;
+  uint8_t *memory;
 
   if (stat (file, &st) < 0)
     {
       fprintf (stderr, "%s: %s.\n", file, strerror (errno));
-      goto err0;
+      return -1;
     }
 
   if (!S_ISREG (st.st_mode))
     {
       fprintf (stderr, "%s: Not a regular file.\n", file);
-      goto err0;
+      return -1;
     }
 
-  if (st.st_size < 0 || st.st_size > 0x4000)
+  if (st.st_size != 8192)
     {
       fprintf (stderr,
                "%s: Invalid file size. Input the invaders "
                "image combined.\n",
                file);
-      goto err0;
+      return -1;
     }
 
   fp = fopen (file, "rb");
   if (fp == NULL)
     {
       fprintf (stderr, "%s: %s.\n", file, strerror (errno));
-      goto err0;
+      return -1;
     }
 
-  mem = calloc (1, 0x10000);
-  if (mem == NULL)
+  memory = (uint8_t *) calloc (1, 0x10000);
+  if (memory == NULL)
     {
       fprintf (stderr, "Memory allocation failed.\n");
-      goto err1;
+      fclose (fp);
+      return -1;
     }
 
-  if (fread (mem, st.st_size, 1, fp) != 1)
+  if (fread (memory, (size_t) st.st_size, 1, fp) != 1)
     {
       fprintf (stderr, "%s: Failed to load file.\n", file);
-      goto err2;
+      fclose (fp);
+      free (memory);
+      return -1;
     }
 
-  emu->memory = mem;
+  emu->memory = memory;
   emu->memory_size = 0x10000;
   fclose (fp);
   return 0;
-err2:
-  free (mem);
-err1:
-  fclose (fp);
-err0:
-  return -1;
 }
 
 static uint8_t
@@ -361,48 +363,48 @@ static uint8_t
 spaceinvaders_io_inb (void *emuptr, uint8_t port)
 {
   struct spaceinvaders *emu = (struct spaceinvaders *) emuptr;
-  uint8_t val;
+  uint8_t value;
   uint16_t s;
 
   switch (port)
     {
     case 0x00: /* Unused ? */
-      val = emu->inp0;
+      value = emu->inp0;
       break;
     case 0x01: /* Input 1 */
-      val = emu->inp1;
+      value = emu->inp1;
       break;
     case 0x02: /* Input 2 */
-      val = emu->inp2;
+      value = emu->inp2;
       break;
     case 0x03: /* Shift register */
       s = ((uint16_t) emu->shift1 << 8);
       s |= ((uint16_t) emu->shift0);
-      val = (s >> (8 - emu->shift_offset)) & 0xff;
+      value = (s >> (8 - emu->shift_offset)) & 0xff;
       break;
     default: /* Invalid port */
-      val = 0;
+      value = 0;
       break;
     }
 
-  return val;
+  return value;
 }
 
 static void
-spaceinvaders_io_outb (void *emuptr, uint8_t port, uint8_t val)
+spaceinvaders_io_outb (void *emuptr, uint8_t port, uint8_t value)
 {
   struct spaceinvaders *emu = (struct spaceinvaders *) emuptr;
 
   switch (port)
     {
     case 0x02: /* Shift amount (3 bits) */
-      emu->shift_offset = val & 0x07;
+      emu->shift_offset = value & 0x07;
       break;
     case 0x03: /* Sound bits */
       break;
     case 0x04: /* Shift data */
       emu->shift0 = emu->shift1;
-      emu->shift1 = val;
+      emu->shift1 = value;
       break;
     case 0x05: /* Sound bits */
       break;
