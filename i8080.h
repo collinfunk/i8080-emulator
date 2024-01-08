@@ -46,7 +46,7 @@ struct i8080
   bool int_requested; /* INT - Interrupt requested */
   uint8_t int_opcode; /* In case someone interrupts with a 0x00 nop? */
   uintmax_t cycles;
-  void *opaque;
+  void *user_data;
   uint8_t (*read_byte) (void *, uint16_t);
   void (*write_byte) (void *, uint16_t, uint8_t);
   uint8_t (*io_inb) (void *, uint8_t);

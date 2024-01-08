@@ -62,7 +62,6 @@ static const uint8_t parity_table[256] = {
  * and compare instructions.
  */
 static const uint8_t ac_table[8] = { 0, 0, 1, 0, 1, 0, 1, 1 };
-
 static const uint8_t subtract_ac_table[8] = { 1, 0, 0, 0, 1, 1, 1, 0 };
 
 static void
@@ -101,41 +100,41 @@ get_hl (struct i8080 *ctx)
 static void
 set_psw (struct i8080 *ctx, uint16_t val)
 {
-  ctx->a = (val >> 8) & 0xff;
-  ctx->f = val & 0xff;
+  ctx->a = (val >> 8) & UINT8_MAX;
+  ctx->f = val & UINT8_MAX;
 }
 
 static void
 set_bc (struct i8080 *ctx, uint16_t val)
 {
-  ctx->b = (val >> 8) & 0xff;
-  ctx->c = val & 0xff;
+  ctx->b = (val >> 8) & UINT8_MAX;
+  ctx->c = val & UINT8_MAX;
 }
 
 static void
 set_de (struct i8080 *ctx, uint16_t val)
 {
-  ctx->d = (val >> 8) & 0xff;
-  ctx->e = val & 0xff;
+  ctx->d = (val >> 8) & UINT8_MAX;
+  ctx->e = val & UINT8_MAX;
 }
 
 static void
 set_hl (struct i8080 *ctx, uint16_t val)
 {
-  ctx->h = (val >> 8) & 0xff;
-  ctx->l = val & 0xff;
+  ctx->h = (val >> 8) & UINT8_MAX;
+  ctx->l = val & UINT8_MAX;
 }
 
 static uint8_t
 read_byte (struct i8080 *ctx, uint16_t address)
 {
-  return ctx->read_byte (ctx->opaque, address);
+  return ctx->read_byte (ctx->user_data, address);
 }
 
 static void
 write_byte (struct i8080 *ctx, uint16_t address, uint8_t val)
 {
-  ctx->write_byte (ctx->opaque, address, val);
+  ctx->write_byte (ctx->user_data, address, val);
 }
 
 static uint16_t
@@ -148,8 +147,8 @@ read_word (struct i8080 *ctx, uint16_t address)
 static void
 write_word (struct i8080 *ctx, uint16_t address, uint16_t val)
 {
-  write_byte (ctx, address, val & 0xff);
-  write_byte (ctx, address + 1, (val >> 8) & 0xff);
+  write_byte (ctx, address, val & UINT8_MAX);
+  write_byte (ctx, address + 1, (val >> 8) & UINT8_MAX);
 }
 
 static uint8_t
@@ -240,7 +239,7 @@ op_add (struct i8080 *ctx, uint8_t val)
   tmp16 = ctx->a + val;
   acindex
       = ((ctx->a & 0x88) >> 1) | ((val & 0x88) >> 2) | ((tmp16 & 0x88) >> 3);
-  ctx->a = tmp16 & 0xff;
+  ctx->a = tmp16 & UINT8_MAX;
   set_flag_to (ctx, FLAG_C, (tmp16 & 0x100) != 0);
   set_flag_to (ctx, FLAG_P, parity_table[ctx->a]);
   set_flag_to (ctx, FLAG_AC, ac_table[acindex & 7]);
@@ -257,7 +256,7 @@ op_adc (struct i8080 *ctx, uint8_t val)
   tmp16 = ctx->a + val + ((ctx->f & FLAG_C) != 0);
   acindex
       = ((ctx->a & 0x88) >> 1) | ((val & 0x88) >> 2) | ((tmp16 & 0x88) >> 3);
-  ctx->a = tmp16 & 0xff;
+  ctx->a = tmp16 & UINT8_MAX;
   set_flag_to (ctx, FLAG_C, (tmp16 & 0x100) != 0);
   set_flag_to (ctx, FLAG_P, parity_table[ctx->a]);
   set_flag_to (ctx, FLAG_AC, ac_table[acindex & 7]);
@@ -274,7 +273,7 @@ op_sub (struct i8080 *ctx, uint8_t val)
   tmp16 = ctx->a - val;
   acindex
       = ((ctx->a & 0x88) >> 1) | ((val & 0x88) >> 2) | ((tmp16 & 0x88) >> 3);
-  ctx->a = tmp16 & 0xff;
+  ctx->a = tmp16 & UINT8_MAX;
   set_flag_to (ctx, FLAG_C, (tmp16 & 0x100) != 0);
   set_flag_to (ctx, FLAG_P, parity_table[ctx->a]);
   set_flag_to (ctx, FLAG_AC, subtract_ac_table[acindex & 7]);
@@ -291,7 +290,7 @@ op_sbb (struct i8080 *ctx, uint8_t val)
   tmp16 = ctx->a - val - ((ctx->f & FLAG_C) != 0);
   acindex
       = ((ctx->a & 0x88) >> 1) | ((val & 0x88) >> 2) | ((tmp16 & 0x88) >> 3);
-  ctx->a = tmp16 & 0xff;
+  ctx->a = tmp16 & UINT8_MAX;
   set_flag_to (ctx, FLAG_C, (tmp16 & 0x100) != 0);
   set_flag_to (ctx, FLAG_P, parity_table[ctx->a]);
   set_flag_to (ctx, FLAG_AC, subtract_ac_table[acindex & 7]);
@@ -351,9 +350,9 @@ op_cmp (struct i8080 *ctx, uint8_t val)
   acindex
       = ((ctx->a & 0x88) >> 1) | ((val & 0x88) >> 2) | ((tmp16 & 0x88) >> 3);
   set_flag_to (ctx, FLAG_C, (tmp16 & 0x100) != 0);
-  set_flag_to (ctx, FLAG_P, parity_table[tmp16 & 0xff]);
+  set_flag_to (ctx, FLAG_P, parity_table[tmp16 & UINT8_MAX]);
   set_flag_to (ctx, FLAG_AC, subtract_ac_table[acindex & 7]);
-  set_flag_to (ctx, FLAG_Z, (tmp16 & 0xff) == 0);
+  set_flag_to (ctx, FLAG_Z, (tmp16 & UINT8_MAX) == 0);
   set_flag_to (ctx, FLAG_S, (tmp16 & 0x80) != 0);
 }
 
@@ -390,7 +389,7 @@ op_dad (struct i8080 *ctx, uint16_t val)
 
   tmp32 = get_hl (ctx) + val;
   set_flag_to (ctx, FLAG_C, (tmp32 & 0x10000) != 0);
-  set_hl (ctx, tmp32 & 0xffff);
+  set_hl (ctx, tmp32 & UINT16_MAX);
 }
 
 static void
@@ -468,7 +467,7 @@ i8080_init (struct i8080 *ctx)
   ctx->int_requested = false;
   ctx->int_opcode = 0;
   ctx->cycles = 0;
-  ctx->opaque = NULL;
+  ctx->user_data = NULL;
   ctx->read_byte = NULL;
   ctx->write_byte = NULL;
   ctx->io_inb = NULL;
@@ -550,7 +549,7 @@ i8080_exec_opcode (struct i8080 *ctx, uint8_t opcode)
       ctx->cycles += 7;
       break;
     case 0x0b: /* DCX B */
-      if (--ctx->c == 0xff)
+      if (--ctx->c == UINT8_MAX)
         ctx->b--;
       ctx->cycles += 5;
       break;
@@ -614,7 +613,7 @@ i8080_exec_opcode (struct i8080 *ctx, uint8_t opcode)
       ctx->cycles += 7;
       break;
     case 0x1b: /* DCX D */
-      if (--ctx->e == 0xff)
+      if (--ctx->e == UINT8_MAX)
         ctx->d--;
       ctx->cycles += 5;
       break;
@@ -678,7 +677,7 @@ i8080_exec_opcode (struct i8080 *ctx, uint8_t opcode)
       ctx->cycles += 16;
       break;
     case 0x2b: /* DCX H */
-      if (--ctx->l == 0xff)
+      if (--ctx->l == UINT8_MAX)
         ctx->h--;
       ctx->cycles += 5;
       break;
@@ -695,7 +694,7 @@ i8080_exec_opcode (struct i8080 *ctx, uint8_t opcode)
       ctx->cycles += 7;
       break;
     case 0x2f: /* CMA */
-      ctx->a ^= 0xff;
+      ctx->a ^= UINT8_MAX;
       ctx->cycles += 4;
       break;
     case 0x30: /* NOP (Undocumented) */
@@ -1394,7 +1393,7 @@ i8080_exec_opcode (struct i8080 *ctx, uint8_t opcode)
       ctx->cycles += 10;
       break;
     case 0xd3: /* OUT */
-      ctx->io_outb (ctx->opaque, fetch_byte (ctx), ctx->a);
+      ctx->io_outb (ctx->user_data, fetch_byte (ctx), ctx->a);
       ctx->cycles += 10;
       break;
     case 0xd4: /* CNC */
@@ -1665,12 +1664,11 @@ i8080_exec_opcode (struct i8080 *ctx, uint8_t opcode)
       op_cmp (ctx, fetch_byte (ctx));
       ctx->cycles += 7;
       break;
-    case 0xff: /* RST 7 */
+    case UINT8_MAX: /* RST 7 */
       op_rst (ctx, 0x0038);
       ctx->cycles += 11;
       break;
-    default:
-      /* Unreachable */
+    default: /* Unreachable */
       break;
     }
 }

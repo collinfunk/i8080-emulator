@@ -178,7 +178,7 @@ spaceinvaders_create (void)
   if (emu == NULL)
     return NULL;
   i8080_init (&emu->cpu);
-  emu->cpu.opaque = emu;
+  emu->cpu.user_data = emu;
   emu->cpu.read_byte = spaceinvaders_read_byte;
   emu->cpu.write_byte = spaceinvaders_write_byte;
   emu->cpu.io_inb = spaceinvaders_io_inb;
@@ -311,7 +311,7 @@ spaceinvaders_load_file (struct spaceinvaders *emu, const char *file)
       return -1;
     }
 
-  memory = (uint8_t *) calloc (1, 0x10000);
+  memory = (uint8_t *) calloc (1, UINT16_MAX);
   if (memory == NULL)
     {
       fprintf (stderr, "Memory allocation failed.\n");
@@ -328,7 +328,7 @@ spaceinvaders_load_file (struct spaceinvaders *emu, const char *file)
     }
 
   emu->memory = memory;
-  emu->memory_size = 0x10000;
+  emu->memory_size = UINT16_MAX;
   fclose (fp);
   return 0;
 }
